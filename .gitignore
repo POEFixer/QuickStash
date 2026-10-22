@@ -1,7 +1,11 @@
+# Build output (Visual Studio / MSBuild)
+x64/
+Release/
+Debug/
 bin/
 obj/
 .vs/
 *.user
-docs/poe2stash.gif
-CLAUDE.md
-AGENTS.md
+*.aps
+*.ipch
+*.VC.db

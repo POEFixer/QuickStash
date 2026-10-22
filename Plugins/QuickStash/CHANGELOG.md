@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.4
+
+- The "?" next to a section title now sits in its own gap instead of on the section's line.
+- Diagnostics now looks the same as in the other POEFixer plugins.
+- The transfer section has a shorter title, so its "?" stays visible in a narrow window at a large font size; the status lines under "How it works" wrap instead of running off the card.
+
 ## 1.4.3
 
 - First POEFixer release: runs smoothly even with full stash tabs; item reading moved off the game frame.

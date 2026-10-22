@@ -11,7 +11,6 @@
 #include "../../../../POEFixer/plugin_sdk/PluginSDK.h"
 
 #include <imgui.h>
-#include "../../../../POEFixer/imgui/IconsFontAwesome6.h"
 #include "../../../../POEFixer/plugin_sdk/PluginUi.h"
 
 #include <algorithm>
@@ -248,20 +247,9 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
 void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state, const char* version,
                          const std::filesystem::path& pluginDir, const QuickStashGame::ScanSnapshot* live,
                          uint32_t readerFaults, int languageSetting) {
-    BeginCard("##qsDiagCard");
-    char header[64];
-    std::snprintf(header, sizeof(header), "%s  Diagnostics###qsDiagnostics", ICON_FA_BUG);
-    // A quiet disclosure row in the heading colour that stays inside the card's
-    // padding (a framed CollapsingHeader reaches past it).
-    ImGui::PushStyleColor(ImGuiCol_Text, Colors().Accent);
-    const bool open = ImGui::TreeNodeEx(header, ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding |
-                                                    ImGuiTreeNodeFlags_NoTreePushOnOpen);
-    ImGui::PopStyleColor();
-    Tip("Tools for bug reports. Closed, they read nothing.");
-    if (!open) {
-        EndCard();
+    if (!BeginDiagnostics("The background reader's numbers and a one-click capture of what the plugin sees, for "
+                          "bug reports.", "qsDiagnostics"))
         return;
-    }
     Hint("For bug reports. Open your inventory and a stash tab, type in the game's search box, then press "
          "Capture. Nothing is read until you do.");
     ImGui::Spacing();
@@ -307,7 +295,7 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
     }
     if (!state.status.empty()) Hint(state.status.c_str());
     if (!c.valid) {
-        EndCard();
+        EndDiagnostics();
         return;
     }
 
@@ -393,7 +381,7 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
         }
         ImGui::EndTabBar();
     }
-    EndCard();
+    EndDiagnostics();
 }
 
 } // namespace QuickStashUi

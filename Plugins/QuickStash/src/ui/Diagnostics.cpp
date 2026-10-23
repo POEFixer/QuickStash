@@ -266,7 +266,11 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
     }
 
     if (ImGui::Button("Capture###qsDiagCapture")) {
-        const ImVec2 disp = ImGui::GetIO().DisplaySize;
+        // The game's size: this tab may be drawn in a separate menu window, whose
+        // display size is that window's own.
+        const PluginSDK::ScreenSize game = ctx->Game.GetScreenSize();
+        const ImVec2 disp = (game.Width > 0.0f && game.Height > 0.0f) ? ImVec2(game.Width, game.Height)
+                                                                     : ImGui::GetIO().DisplaySize;
         state.capture = CaptureDiagnostics(ctx, version, disp.x, disp.y, languageSetting);
         state.status.clear();
     }

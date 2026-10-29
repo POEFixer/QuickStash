@@ -6,6 +6,7 @@
 // Maintained by POEFixer since October 2026.
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
+#include "lang_en.generated.h"   // the embedded English: once per DLL, after PluginSDK.h
 
 #include "Settings.h"
 #include "game/PanelDetector.h"
@@ -19,6 +20,7 @@
 #include <imgui.h>
 #include "../../../POEFixer/plugin_sdk/PluginUi.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>
@@ -30,7 +32,7 @@
 POEFIXER_PLUGIN_INFO(
     "QuickStash",
     "Quick Stash",
-    "1.4.6",
+    "1.4.7",
     "Omer Faruk ARPA, POEFixer",
     "One-click Transfer from your backpack into the open stash, vendor or trade window, and TAKE from the stash by the game's own item search.")
 
@@ -40,6 +42,7 @@ IMGUI_API void ImTextInitClassifiers();
 
 namespace {
 
+namespace I18n = PluginSDK::I18n;
 using Clock = std::chrono::steady_clock;
 
 constexpr long long kSnapshotMaxAgeMs   = 1000;  // older readings count as "nothing known"
@@ -149,10 +152,16 @@ public:
 
         if (m_transfer.IsRunning()) {
             ReleaseOverlayInput();
+            const int total = m_transfer.ProgressTotal();
+            const std::string done = std::to_string(std::min(m_transfer.ProgressIndex(), total));
+            const std::string all = std::to_string(total);
+            const std::string line =
+                m_transfer.IsWithdrawMode()
+                    ? I18n::TrF("progress_taking", { { "done", done }, { "total", all } })
+                    : I18n::TrF("progress_transferring", { { "done", done }, { "total", all } });
             QuickStashOverlay::DrawProgress(ImGui::GetBackgroundDrawList(), m_progressPos, m_progressMetrics,
-                                            m_transfer.IsWithdrawMode() ? "Taking" : "Transferring",
-                                            m_transfer.ProgressIndex(), m_transfer.ProgressTotal(),
-                                            m_settings.cancelOnRightClick);
+                                            line.c_str(), m_transfer.ProgressIndex(), total,
+                                            m_settings.cancelOnRightClick ? I18n::Tr("progress_cancel_hint") : nullptr);
             return;
         }
 
@@ -170,7 +179,7 @@ public:
         char transferCountText[16];
         std::snprintf(transferCountText, sizeof(transferCountText), "%d", transferCount);
         QuickStashOverlay::ButtonLook tlook;
-        tlook.label = "Transfer";
+        tlook.label = I18n::Tr("button_transfer");
         tlook.secondary = transferCountText;
         tlook.enabled = !menuVisible && transferCount > 0;
         const ImVec2 tpos(bp.Grid.GridScreenX + m_settings.buttonOffsetX,
@@ -179,13 +188,14 @@ public:
         // TAKE button above the game's search box.
         const bool showTake = m_settings.showTakeButton && snap->stashOpen && snap->takeScanned && snap->highlightFound;
         const int takeCount = static_cast<int>(snap->takeRects.size());
-        char takeLabel[32];
+        const std::string takeLabel =
+            snap->stashIsGuild ? I18n::TrF("button_take_guild", { { "count", std::to_string(takeCount) } })
+                               : I18n::TrF("button_take", { { "count", std::to_string(takeCount) } });
         char takeQty[24] = "";
-        std::snprintf(takeLabel, sizeof(takeLabel), snap->stashIsGuild ? "TAKE G(%d)" : "TAKE (%d)", takeCount);
         if (snap->takePending) std::snprintf(takeQty, sizeof(takeQty), "...");
         else if (takeCount > 0 && snap->takeQty != takeCount) std::snprintf(takeQty, sizeof(takeQty), "x%d", snap->takeQty);
         QuickStashOverlay::ButtonLook wlook;
-        wlook.label = takeLabel;
+        wlook.label = takeLabel.c_str();
         wlook.secondary = takeQty;
         wlook.enabled = !menuVisible && takeCount > 0 && !snap->takePending;
         const ImVec2 wpos(snap->highlightX, snap->highlightY - m.height - m.gap);

@@ -1,6 +1,6 @@
 # Quick Stash
 
-Current version: 1.4.6
+Current version: 1.4.7
 
 Requires POE2Fixer 364 or newer.
 
@@ -80,8 +80,10 @@ Turn off POEFixer's own auto-stash while you use this plugin: both use Ctrl+clic
   stops reading the search box).
 - *Search item mods too*: also match words in the items' mods.
 - *Mod text language*: mod lines are always searchable in English; pick your
-  game client's language to search its wording too. *Automatic* takes the
-  language from the search box label.
+  game client's language to search its wording too. *Automatic* takes the game
+  language POEFixer knows (an older POEFixer: the language of the search box
+  label). In that language the search also finds the game's own word for
+  Corrupted and the waystone reward lines (Item Rarity, Monster Pack Size, ...).
 - *Outline the items TAKE will grab* and *Outline colour*.
 
 **Buttons on screen**
@@ -100,15 +102,19 @@ the cursor (slow PC, high latency); lower them for faster runs.
 **Diagnostics** (collapsed): for bug reports. *Capture* reads the inventories,
 the open tab's items with their searchable text and the visible game UI texts
 once; *Copy text report* copies a report and saves it as
-`config/text-report.txt` in the plugin folder.
+`config/text-report.txt` in the plugin folder. The card mixes languages on
+purpose: its labels follow the program language, the texts it captured are the
+game's, and the copied report is in English.
 
 Settings are saved in `config/settings.json` in the plugin folder. Settings from
 earlier Quick Stash versions are read and kept.
 
 ## Known limits
 
-- TAKE can only find the search box when its text is readable; with several
-  different texts on the box's row it stays hidden rather than guess.
+- TAKE finds the search box by its label: the game's own wording in the game
+  language POEFixer knows, or one of the built-in spellings. It can only find it
+  when its text is readable; with several different texts on the box's row it
+  stays hidden rather than guess.
 - Localized mod wording depends on the game text the host has for that
   language; English mod text is always included.
 - Chat being open is not detected: close chat before a run (Ctrl+click in chat
@@ -124,11 +130,12 @@ This repository is the plugin folder from the POE2Fixer source tree (`Plugins/Qu
 
 - `POEFixer/plugin_sdk/` - the POE2Fixer Plugin SDK v6 headers (`PluginAbi.h`, `PluginSDK.h`)
 - `POEFixer/imgui/` - the Dear ImGui sources the DLL compiles against
+- `tools/plugin_i18n/gen.py` - the translation tool: after editing `Plugins/QuickStash/lang/en.json` run `python tools/plugin_i18n/gen.py Plugins/QuickStash` (it rewrites the embedded English header); `--gate` checks every language file and the keys the sources use
 
 1. Install Visual Studio 2022 with the "Desktop development with C++" workload (MSVC v143, Windows 10/11 SDK).
 2. Open `QuickStash.sln`, select **Release | x64** and build the solution.
 3. The plugin is written to `x64\Release\Plugins\QuickStash\QuickStash.dll` (Release builds carry no debug information, see `Directory.Build.targets`).
-4. Copy `QuickStash.dll` into `Plugins\QuickStash\` next to the POE2Fixer executable.
+4. Copy `QuickStash.dll` into `Plugins\QuickStash\` next to the POE2Fixer executable, together with `Plugins\QuickStash\lang` from this repository (same folder names).
 
 ## Credits
 

@@ -52,8 +52,7 @@ inline bool DrawExclusionGrid(QuickStashConfig::Settings& settings, ExclusionGri
     ImGui::InvisibleButton("##qsExclusionGrid", ImVec2(gridW, gridH));
     const bool hovered = ImGui::IsItemHovered();
     const bool active = ImGui::IsItemActive();
-    PluginUi::Tip("Click a cell to toggle it, or hold the mouse button and drag across cells.\n"
-        "Red cells: items touching them stay in your bag.\nGreen cells: their items are transferred.");
+    PluginUi::Tip(PluginSDK::I18n::Tr("transfer_grid_tip"));
 
     int hx = -1, hy = -1;
     const ImVec2 mouse = ImGui::GetIO().MousePos;

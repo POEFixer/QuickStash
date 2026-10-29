@@ -76,8 +76,10 @@ Turn off POEFixer's own auto-stash while you use this plugin: both use Ctrl+clic
   stops reading the search box).
 - *Search item mods too*: also match words in the items' mods.
 - *Mod text language*: mod lines are always searchable in English; pick your
-  game client's language to search its wording too. *Automatic* takes the
-  language from the search box label.
+  game client's language to search its wording too. *Automatic* takes the game
+  language POEFixer knows (an older POEFixer: the language of the search box
+  label). In that language the search also finds the game's own word for
+  Corrupted and the waystone reward lines (Item Rarity, Monster Pack Size, ...).
 - *Outline the items TAKE will grab* and *Outline colour*.
 
 **Buttons on screen**
@@ -96,15 +98,19 @@ the cursor (slow PC, high latency); lower them for faster runs.
 **Diagnostics** (collapsed): for bug reports. *Capture* reads the inventories,
 the open tab's items with their searchable text and the visible game UI texts
 once; *Copy text report* copies a report and saves it as
-`config/text-report.txt` in the plugin folder.
+`config/text-report.txt` in the plugin folder. The card mixes languages on
+purpose: its labels follow the program language, the texts it captured are the
+game's, and the copied report is in English.
 
 Settings are saved in `config/settings.json` in the plugin folder. Settings from
 earlier Quick Stash versions are read and kept.
 
 ## Known limits
 
-- TAKE can only find the search box when its text is readable; with several
-  different texts on the box's row it stays hidden rather than guess.
+- TAKE finds the search box by its label: the game's own wording in the game
+  language POEFixer knows, or one of the built-in spellings. It can only find it
+  when its text is readable; with several different texts on the box's row it
+  stays hidden rather than guess.
 - Localized mod wording depends on the game text the host has for that
   language; English mod text is always included.
 - Chat being open is not detected: close chat before a run (Ctrl+click in chat

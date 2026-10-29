@@ -187,13 +187,13 @@ inline void DrawSelection(ImDrawList* dl, const std::vector<Rect>& rects, const 
     }
 }
 
-// Progress panel shown in place of the buttons while a run is clicking.
-inline void DrawProgress(ImDrawList* dl, ImVec2 pos, const Metrics& m, const char* verb, int index, int total,
-                         bool cancelHint) {
-    if (!dl || total <= 0) return;
-    char line[96];
-    std::snprintf(line, sizeof(line), "%s %d / %d", verb, std::min(index, total), total);
-    const char* hint = cancelHint ? "Right-click to cancel" : nullptr;
+// Progress panel shown in place of the buttons while a run is clicking: `line`
+// ("Transferring 3 / 12") and the optional cancel `hint` are the caller's texts in
+// the program language; index / total fill the bar.
+inline void DrawProgress(ImDrawList* dl, ImVec2 pos, const Metrics& m, const char* line, int index, int total,
+                         const char* hint) {
+    if (!dl || total <= 0 || !line) return;
+    if (hint && !*hint) hint = nullptr;
     const ImVec2 ts = TextSize(m, line);
     const ImVec2 hs = hint ? TextSize(m, hint) : ImVec2(0.0f, 0.0f);
     const float barH = std::max(3.0f, std::round(4.0f * m.scale));

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.7
+
+- Follows the program language (ten languages).
+- "Automatic" mod text language takes the game language POEFixer knows (POEFixer 371 and later); an older POEFixer still reads it from the search box label.
+- TAKE also finds the search box by the game's own label in the game language, so clients whose label the plugin did not know work too.
+- In a non-English game the search also finds the game's own word for Corrupted and the waystone reward lines (Item Rarity, Monster Pack Size and the others).
+
 ## 1.4.6
 
 - Works with the separate menu window (POEFixer 366): the host hands the plugin the right drawing context for its settings tab and for its overlay.

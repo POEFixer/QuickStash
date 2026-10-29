@@ -62,6 +62,9 @@
     <ClInclude Include="src\Settings.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="src\lang_en.generated.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="src\game\Languages.h">
       <Filter>src\game</Filter>
     </ClInclude>
@@ -99,6 +102,9 @@
       <Filter>src\ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\SettingsUi.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\TextUtil.h">
       <Filter>src\ui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginAbi.h">

@@ -1,8 +1,11 @@
 // Quick Stash settings tab, drawn with the plugin UI kit (PluginUi.h).
+// Every text is a key of lang/en.json, looked up here in the program language
+// (PluginI18n) every frame.
 //
 // Copyright (C) Omer Faruk ARPA and POEFixer contributors.
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "SettingsUi.h"
+#include "TextUtil.h"
 
 #include "../game/Languages.h"
 #include "../game/Scanner.h"
@@ -14,12 +17,21 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
+#include <string_view>
 
 namespace QuickStashUi {
 namespace {
 
 using QuickStashConfig::Settings;
 using namespace PluginUi;
+namespace I18n = PluginSDK::I18n;
+
+std::string Num(int v) { return std::to_string(v); }
+
+// Marks where a slider's own number goes in a translated text (a TrF argument); NumberFormat
+// turns the first mark into the conversion (TextUtil.h).
+constexpr const char* kValue = kNumberMark;
 
 // Quiet buttons laid out left to right, wrapping to a new line when the row is
 // full (the kit has no flow layout).
@@ -47,6 +59,14 @@ private:
     float m_used = 0.0f;
 };
 
+// A section's reset button under its slider rows: in the field column when its
+// translated label fits there, else from the row's left edge (a long label in the
+// field column would run past the card). Call at the start of a row.
+bool ResetButton(const LabelColumn& col, const char* label) {
+    if (ButtonWidth(label) <= ImGui::GetContentRegionAvail().x - col.Width()) col.RowNoWidth("");
+    return SubtleButton(label);
+}
+
 // A small status dot in front of a line of live status text (the kit has none).
 void StatusDot(bool ok) {
     const float r = std::floor(ImGui::GetFontSize() * 0.22f);
@@ -61,48 +81,42 @@ void StatusDot(bool ok) {
 
 void DrawSectionHowTo(const QuickStashGame::ScanSnapshot* live, bool transferRunning) {
     BeginCard("##qsHowTo");
-    Heading(ICON_FA_CIRCLE_INFO, "How it works",
-            "Quick Stash Ctrl+clicks items for you.\n"
-            "Transfer empties your backpack into whatever panel is open on the other side "
-            "(stash, guild stash, vendor, trade window).\n"
-            "TAKE pulls the items matching the game's own \"Highlight Items\" search out of the open "
-            "stash tab into your backpack.\n"
-            "Turn off POEFixer's own auto-stash while you use this plugin: both Ctrl+click.");
-    Hint("1. Open your inventory and a storage panel.\n"
-         "2. Transfer: click the Transfer button above your backpack.\n"
-         "3. TAKE: type in the game's search box under the stash; a TAKE button appears above the box and "
-         "the matching items are outlined. Click TAKE.\n"
-         "Right-click, alt-tab or opening the POEFixer menu stops a running transfer.");
+    Heading(ICON_FA_CIRCLE_INFO, I18n::Tr("howto_title"), I18n::Tr("howto_help"));
+    Hint(I18n::Tr("howto_steps"));
     ImGui::Spacing();
 
     const bool active = live && live->active;
     const bool bagOpen = active && live->hasBackpack && live->backpack.Grid.Valid;
     ImGui::PushTextWrapPos(0.0f);   // the status lines wrap in a narrow window
     StatusDot(bagOpen);
-    ImGui::TextUnformatted(!active ? "Waiting for the game (in game and in front)" :
-                           bagOpen ? "Inventory open" : "Inventory closed");
+    ImGui::TextUnformatted(!active ? I18n::Tr("howto_waiting") :
+                           bagOpen ? I18n::Tr("howto_inventory_open") : I18n::Tr("howto_inventory_closed"));
     if (bagOpen) {
         StatusDot(live->stashOpen);
         if (live->stashOpen) {
-            ImGui::Text("%s tab open, %d item%s", live->stashIsGuild ? "Guild stash" : "Storage",
-                        live->stashItemCount, live->stashItemCount == 1 ? "" : "s");
+            const std::string count = Num(live->stashItemCount);
+            ImGui::TextUnformatted((live->stashIsGuild ? I18n::TrF("howto_guild_tab_open", { { "count", count } })
+                                                       : I18n::TrF("howto_storage_tab_open", { { "count", count } }))
+                                       .c_str());
         } else {
-            ImGui::TextUnformatted("No storage tab with items on screen");
+            ImGui::TextUnformatted(I18n::Tr("howto_no_storage"));
         }
         if (live->stashOpen && live->takeScanned) {
             StatusDot(live->highlightFound);
             if (live->highlightFound) {
-                ImGui::Text("Search \"%s\": TAKE would grab %d item%s%s", live->filter.c_str(),
-                            static_cast<int>(live->takeRects.size()), live->takeRects.size() == 1 ? "" : "s",
-                            live->takePending ? " (still reading)" : "");
+                std::string line = I18n::TrF("howto_take_would_grab",
+                                             { { "filter", live->filter },
+                                               { "count", Num(static_cast<int>(live->takeRects.size())) } });
+                if (live->takePending) line += std::string(" ") + I18n::Tr("howto_still_reading");
+                ImGui::TextUnformatted(line.c_str());
             } else {
-                ImGui::TextUnformatted("Search box not readable (TAKE hidden)");
+                ImGui::TextUnformatted(I18n::Tr("howto_search_unreadable"));
             }
         }
     }
     if (transferRunning) {
         StatusDot(true);
-        ImGui::TextUnformatted("A transfer is running");
+        ImGui::TextUnformatted(I18n::Tr("howto_running"));
     }
     ImGui::PopTextWrapPos();
     EndCard();
@@ -111,32 +125,34 @@ void DrawSectionHowTo(const QuickStashGame::ScanSnapshot* live, bool transferRun
 bool DrawSectionTransfer(Settings& s, SettingsUiState& state) {
     bool changed = false;
     BeginCard("##qsTransfer");
-    Heading(ICON_FA_TABLE_CELLS, "Transfer: backpack to panel",
-            "Each cell is a backpack slot. Items touching a red cell stay in your bag; "
-            "everything else is Ctrl+clicked into the open panel, row by row.\n"
-            "With a vendor open, Ctrl+click sells; with a trade window open, it offers the item.");
-    Hint("Click or drag across cells to choose what stays in your bag.");
+    Heading(ICON_FA_TABLE_CELLS, I18n::Tr("transfer_title"), I18n::Tr("transfer_help"));
+    Hint(I18n::Tr("transfer_hint"));
     ImGui::Spacing();
     changed |= DrawExclusionGrid(s, state.grid);
     ImGui::Spacing();
 
-    LegendSwatch("Transferred", kCellMoved);
+    const char* movedLabel = I18n::Tr("transfer_legend_moved");
+    const char* keptLabel = I18n::Tr("transfer_legend_kept");
+    LegendSwatch(movedLabel, kCellMoved);
     const float legendGap = ImGui::GetFontSize() * 1.2f;
-    const float keptW = ImGui::GetFontSize() + ImGui::CalcTextSize("Stays in the bag").x;
-    if (ImGui::GetContentRegionAvail().x > keptW + legendGap + ImGui::CalcTextSize("Transferred").x + ImGui::GetFontSize() * 2.0f)
+    const float keptW = ImGui::GetFontSize() + ImGui::CalcTextSize(keptLabel).x;
+    if (ImGui::GetContentRegionAvail().x > keptW + legendGap + ImGui::CalcTextSize(movedLabel).x + ImGui::GetFontSize() * 2.0f)
         ImGui::SameLine(0.0f, legendGap);
-    LegendSwatch("Stays in the bag", kCellKept);
+    LegendSwatch(keptLabel, kCellKept);
 
     ImGui::Spacing();
     WrappingButtonRow row;
-    if (row.Next("Keep left column###qsPresetLeft")) { s.SetLeftColumnExcluded(); changed = true; }
-    Tip("Keeps the items in the leftmost column (the default).");
-    if (row.Next("Transfer everything###qsPresetClear")) { s.ClearIgnoredCells(); changed = true; }
-    Tip("Clears every red cell.");
-    if (row.Next("Invert###qsPresetInvert")) { s.InvertIgnoredCells(); changed = true; }
-    Tip("Swaps red and green cells.");
+    if (row.Next(I18n::TrId("transfer_preset_left"))) { s.SetLeftColumnExcluded(); changed = true; }
+    Tip(I18n::Tr("transfer_preset_left_tip"));
+    if (row.Next(I18n::TrId("transfer_preset_clear"))) { s.ClearIgnoredCells(); changed = true; }
+    Tip(I18n::Tr("transfer_preset_clear_tip"));
+    if (row.Next(I18n::TrId("transfer_preset_invert"))) { s.InvertIgnoredCells(); changed = true; }
+    Tip(I18n::Tr("transfer_preset_invert_tip"));
     ImGui::PushStyleColor(ImGuiCol_Text, Colors().TextSecondary);
-    ImGui::Text("%d of %d cells kept", s.IgnoredCellCount(), QuickStashConfig::kGridCols * QuickStashConfig::kGridRows);
+    ImGui::TextUnformatted(I18n::TrF("transfer_cells_kept",
+                                     { { "kept", Num(s.IgnoredCellCount()) },
+                                       { "total", Num(QuickStashConfig::kGridCols * QuickStashConfig::kGridRows) } })
+                               .c_str());
     ImGui::PopStyleColor();
     EndCard();
     return changed;
@@ -145,37 +161,29 @@ bool DrawSectionTransfer(Settings& s, SettingsUiState& state) {
 bool DrawSectionTake(Settings& s) {
     bool changed = false;
     BeginCard("##qsTake");
-    Heading(ICON_FA_MAGNIFYING_GLASS, "TAKE: stash to backpack",
-            "TAKE reads the game's own \"Highlight Items\" box under the stash. The search works like the "
-            "game's: words separated by spaces must all match, \"quoted text\" is one phrase, !word excludes, "
-            "a|b matches either, and regular expressions work.\n"
-            "An empty box takes the whole tab. TAKE never touches your backpack or equipment.\n"
-            "Careful: with a vendor window open, Ctrl+click buys.");
+    Heading(ICON_FA_MAGNIFYING_GLASS, I18n::Tr("take_title"), I18n::Tr("take_help"));
 
-    changed |= Check("Show the TAKE button", "qsShowTake", &s.showTakeButton,
-                     "Shows TAKE above the game's search box while a stash tab is open.\n"
-                     "Turn it off if you only use Transfer; the plugin then stops reading the search box.");
+    changed |= Check(I18n::Tr("take_show_button"), "qsShowTake", &s.showTakeButton, I18n::Tr("take_show_button_tip"));
     ImGui::BeginDisabled(!s.showTakeButton);
-    changed |= Check("Search item mods too", "qsReadMods", &s.readMods,
-                     "Also matches words in the items' mods (\"rarity\", \"pack size\", \"corrupted\"),\n"
-                     "like the game's highlight. Mods are read only while something is typed.");
+    changed |= Check(I18n::Tr("take_read_mods"), "qsReadMods", &s.readMods, I18n::Tr("take_read_mods_tip"));
     {
-        const LabelColumn col({"Mod text language", "Outline colour"});
+        const char* languageLabel = I18n::Tr("take_mod_language");
+        const char* colourLabel = I18n::Tr("take_outline_colour");
+        const LabelColumn col({languageLabel, colourLabel});
         ImGui::BeginDisabled(!s.readMods);
-        col.Row("Mod text language");
+        col.Row(languageLabel);
         const char* languages[QuickStashGame::kGameLanguageCount];
-        for (int i = 0; i < QuickStashGame::kGameLanguageCount; ++i) languages[i] = QuickStashGame::GameLanguageLabel(i);
+        for (int i = 0; i < QuickStashGame::kGameLanguageCount; ++i)
+            languages[i] = I18n::Tr(QuickStashGame::GameLanguageLabelKey(i));
         changed |= Combo("###qsModLanguage", s.modLanguage, languages, QuickStashGame::kGameLanguageCount);
-        Tip("Mod lines are always searchable in English. Pick your game client's language to\n"
-            "search its mod wording too. Automatic uses the language of the search box label.");
+        Tip(I18n::Tr("take_mod_language_tip"));
         ImGui::EndDisabled();
 
-        changed |= Check("Outline the items TAKE will grab", "qsHighlights", &s.showHighlights,
-                         "Draws a box around every matching item, so you see the selection before clicking.");
+        changed |= Check(I18n::Tr("take_outline"), "qsHighlights", &s.showHighlights, I18n::Tr("take_outline_tip"));
         ImGui::BeginDisabled(!s.showHighlights);
-        col.RowNoWidth("Outline colour");
+        col.RowNoWidth(colourLabel);
         changed |= Swatch("##qsHighlightColor", s.highlightColor.data());
-        Tip("Colour and opacity of the boxes.\nThe fill uses a fifth of this opacity.");
+        Tip(I18n::Tr("take_outline_colour_tip"));
         ImGui::EndDisabled();
     }
     ImGui::EndDisabled();
@@ -186,27 +194,25 @@ bool DrawSectionTake(Settings& s) {
 bool DrawSectionOverlay(Settings& s) {
     bool changed = false;
     BeginCard("##qsOverlay");
-    Heading(ICON_FA_PALETTE, "Buttons on screen",
-            "The buttons follow the game's inventory size, so they keep their place at any resolution.");
-    Hint("Move or resize the Transfer and TAKE buttons if they cover something.");
-    const LabelColumn col({"Button size", "Move left / right", "Move up / down"});
-    changed |= SliderIntRow(col, "Button size", "##qsScale", &s.overlayScalePct, QuickStashConfig::kOverlayScaleMinPct,
-                            QuickStashConfig::kOverlayScaleMaxPct, "%d%%",
-                            "Size of the Transfer and TAKE buttons and the progress panel.");
-    changed |= SliderFloatRow(col, "Move left / right", "##qsOffsetX", &s.buttonOffsetX,
-                              QuickStashConfig::kButtonOffsetMin, QuickStashConfig::kButtonOffsetMax, "%.0f px",
-                              "Moves the Transfer button sideways from its place above the backpack.\n"
-                              "Ctrl+click to type a value.");
-    changed |= SliderFloatRow(col, "Move up / down", "##qsOffsetY", &s.buttonOffsetY,
-                              QuickStashConfig::kButtonOffsetMin, QuickStashConfig::kButtonOffsetMax, "%.0f px",
-                              "Moves the Transfer button up (negative) or down (positive).\n"
-                              "Ctrl+click to type a value.");
-    col.RowNoWidth("");
-    if (SubtleButton("Reset size and position###qsResetOverlay")) {
+    Heading(ICON_FA_PALETTE, I18n::Tr("buttons_title"), I18n::Tr("buttons_help"));
+    Hint(I18n::Tr("buttons_hint"));
+    const char* sizeLabel = I18n::Tr("buttons_size");
+    const char* moveXLabel = I18n::Tr("buttons_move_x");
+    const char* moveYLabel = I18n::Tr("buttons_move_y");
+    const LabelColumn col({sizeLabel, moveXLabel, moveYLabel});
+    const std::string pctFormat = NumberFormat(I18n::TrF("unit_percent", { { "value", kValue } }));
+    const std::string pxFormat = NumberFormat(I18n::TrF("unit_px", { { "value", kValue } }), "%.0f");
+    changed |= SliderIntRow(col, sizeLabel, "##qsScale", &s.overlayScalePct, QuickStashConfig::kOverlayScaleMinPct,
+                            QuickStashConfig::kOverlayScaleMaxPct, pctFormat.c_str(), I18n::Tr("buttons_size_tip"));
+    changed |= SliderFloatRow(col, moveXLabel, "##qsOffsetX", &s.buttonOffsetX, QuickStashConfig::kButtonOffsetMin,
+                              QuickStashConfig::kButtonOffsetMax, pxFormat.c_str(), I18n::Tr("buttons_move_x_tip"));
+    changed |= SliderFloatRow(col, moveYLabel, "##qsOffsetY", &s.buttonOffsetY, QuickStashConfig::kButtonOffsetMin,
+                              QuickStashConfig::kButtonOffsetMax, pxFormat.c_str(), I18n::Tr("buttons_move_y_tip"));
+    if (ResetButton(col, I18n::TrId("buttons_reset"))) {
         s.ResetOverlay();
         changed = true;
     }
-    Tip("Back to 100% and no offset.");
+    Tip(I18n::Tr("buttons_reset_tip"));
     EndCard();
     return changed;
 }
@@ -214,28 +220,26 @@ bool DrawSectionOverlay(Settings& s) {
 bool DrawSectionTiming(Settings& s) {
     bool changed = false;
     BeginCard("##qsTiming");
-    Heading(ICON_FA_STOPWATCH, "Click timing",
-            "Raise these if items are sometimes skipped or picked up onto the cursor instead of moving "
-            "(slow PC, high latency). Lower them for faster runs.");
-    const LabelColumn col({"Between items", "After each click", "Cursor settle", "Hold Ctrl at the end"});
-    changed |= SliderIntRow(col, "Between items", "##qsClickDelay", &s.clickDelayMs, QuickStashConfig::kClickDelayMinMs,
-                            QuickStashConfig::kClickDelayMaxMs, "%d ms", "Pause before moving to the next item.");
-    changed |= SliderIntRow(col, "After each click", "##qsPostClick", &s.postClickDelayMs,
-                            QuickStashConfig::kPostClickDelayMinMs, QuickStashConfig::kPostClickDelayMaxMs, "%d ms",
-                            "Wait after a click before the next step,\nso the game registers it.");
-    changed |= SliderIntRow(col, "Cursor settle", "##qsSettle", &s.cursorSettleMs, QuickStashConfig::kCursorSettleMinMs,
-                            QuickStashConfig::kCursorSettleMaxMs, "%d ms",
-                            "Wait after moving the cursor onto an item\nbefore clicking it.");
-    changed |= SliderIntRow(col, "Hold Ctrl at the end", "##qsHold", &s.completionHoldMs,
-                            QuickStashConfig::kCompletionHoldMinMs, QuickStashConfig::kCompletionHoldMaxMs, "%d ms",
-                            "How long Ctrl stays pressed after the last click, so the last item still moves.\n"
-                            "Never shorter than 60 ms or the \"after each click\" wait.");
-    col.RowNoWidth("");
-    if (SubtleButton("Reset timing###qsResetTiming")) {
+    Heading(ICON_FA_STOPWATCH, I18n::Tr("timing_title"), I18n::Tr("timing_help"));
+    const char* betweenLabel = I18n::Tr("timing_between");
+    const char* afterLabel = I18n::Tr("timing_after_click");
+    const char* settleLabel = I18n::Tr("timing_settle");
+    const char* holdLabel = I18n::Tr("timing_hold");
+    const LabelColumn col({betweenLabel, afterLabel, settleLabel, holdLabel});
+    const std::string msFormat = NumberFormat(I18n::TrF("unit_ms", { { "value", kValue } }));
+    changed |= SliderIntRow(col, betweenLabel, "##qsClickDelay", &s.clickDelayMs, QuickStashConfig::kClickDelayMinMs,
+                            QuickStashConfig::kClickDelayMaxMs, msFormat.c_str(), I18n::Tr("timing_between_tip"));
+    changed |= SliderIntRow(col, afterLabel, "##qsPostClick", &s.postClickDelayMs, QuickStashConfig::kPostClickDelayMinMs,
+                            QuickStashConfig::kPostClickDelayMaxMs, msFormat.c_str(), I18n::Tr("timing_after_click_tip"));
+    changed |= SliderIntRow(col, settleLabel, "##qsSettle", &s.cursorSettleMs, QuickStashConfig::kCursorSettleMinMs,
+                            QuickStashConfig::kCursorSettleMaxMs, msFormat.c_str(), I18n::Tr("timing_settle_tip"));
+    changed |= SliderIntRow(col, holdLabel, "##qsHold", &s.completionHoldMs, QuickStashConfig::kCompletionHoldMinMs,
+                            QuickStashConfig::kCompletionHoldMaxMs, msFormat.c_str(), I18n::Tr("timing_hold_tip"));
+    if (ResetButton(col, I18n::TrId("timing_reset"))) {
         s.ResetTimings();
         changed = true;
     }
-    Tip("Back to the default timing.");
+    Tip(I18n::Tr("timing_reset_tip"));
     EndCard();
     return changed;
 }
@@ -243,14 +247,12 @@ bool DrawSectionTiming(Settings& s) {
 bool DrawSectionSafety(Settings& s) {
     bool changed = false;
     BeginCard("##qsSafety");
-    Heading(ICON_FA_SHIELD_HALVED, "Safety");
-    changed |= Check("Right-click cancels", "qsCancelRight", &s.cancelOnRightClick,
-                     "Pressing the right mouse button stops a running transfer or TAKE.");
-    changed |= Check("Stop when a panel closes", "qsVerifyPanels", &s.verifyPanelsOpen,
-                     "Stops when your inventory closes, and stops TAKE when the stash closes\n"
-                     "or you switch to another stash tab.");
-    Hint("Always on: alt-tab, opening the POEFixer menu or losing the game window stops a run, "
-         "and TAKE stops when your backpack is full.");
+    Heading(ICON_FA_SHIELD_HALVED, I18n::Tr("safety_title"));
+    changed |= Check(I18n::Tr("safety_right_click"), "qsCancelRight", &s.cancelOnRightClick,
+                     I18n::Tr("safety_right_click_tip"));
+    changed |= Check(I18n::Tr("safety_verify_panels"), "qsVerifyPanels", &s.verifyPanelsOpen,
+                     I18n::Tr("safety_verify_panels_tip"));
+    Hint(I18n::Tr("safety_hint"));
     EndCard();
     return changed;
 }

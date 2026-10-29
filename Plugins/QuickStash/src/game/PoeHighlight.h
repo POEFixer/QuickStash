@@ -16,9 +16,20 @@ namespace QuickStashGame {
 
 std::string TrimAscii(const std::string& s);
 
+// The search box label as the game itself words it in the game language the host knows
+// (ClientStrings StashPanelSearchLabel, desktop 371+): matched before the built-in
+// spellings, so a client whose label is none of them is still found.
+struct HostAnchor {
+    std::string  folded;                          // FoldCase'd label; empty = none
+    GameLanguage language = GameLanguage::Auto;   // the host's game language
+};
+
+// The host's label for ReadPoeHighlight: `label` folded, `language` kept.
+HostAnchor MakeHostAnchor(const std::string& label, GameLanguage language);
+
 // The language of a localized "Highlight Items" label, or -1 when `raw` is
 // not such a label.
-int MatchHighlightAnchor(const std::string& raw);
+int MatchHighlightAnchor(const std::string& raw, const HostAnchor& host = {});
 
 // True for the grey hint the box shows while it is empty ("Type keywords...").
 bool IsPlaceholderText(const std::string& raw);
@@ -42,7 +53,7 @@ struct PoeHighlight {
 // nearest to the right of the label on its row is the search; several
 // different texts there, or text plus the empty-box hint, leave the result
 // not found (TAKE then stays hidden rather than guessing).
-PoeHighlight SelectHighlight(const std::vector<UiText>& texts);
+PoeHighlight SelectHighlight(const std::vector<UiText>& texts, const HostAnchor& host = {});
 
 // Walks the visible game UI (at most 6000 elements) and applies SelectHighlight.
 PoeHighlight ReadPoeHighlight(const PluginSDK::Context* ctx);

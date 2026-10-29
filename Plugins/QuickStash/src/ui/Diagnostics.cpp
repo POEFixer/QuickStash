@@ -25,6 +25,17 @@ using namespace PluginUi;
 
 namespace {
 
+namespace I18n = PluginSDK::I18n;
+
+std::string Num(long long v) { return std::to_string(v); }
+
+// A number with a fixed number of decimals for a TrF argument (the format is code).
+std::string Fixed(double v, int decimals) {
+    char buf[48];
+    std::snprintf(buf, sizeof(buf), "%.*f", decimals, v);
+    return buf;
+}
+
 constexpr size_t kMaxItems = 40;
 constexpr size_t kMaxUiTexts = 400;
 
@@ -158,10 +169,6 @@ std::string BuildReport(const DiagCapture& c, const char* version) {
     return r;
 }
 
-float ColumnWidth(const char* sample) {
-    return ImGui::CalcTextSize(sample).x + ImGui::GetStyle().CellPadding.x * 2.0f;
-}
-
 } // namespace
 
 DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* version, float displayW, float displayH,
@@ -209,8 +216,8 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
     c.uiTexts = QuickStashGame::CollectUiTexts(ctx, kMaxUiTexts, &c.uiVisited);
     c.poe = QuickStashGame::ReadPoeHighlight(ctx);
 
-    const int effective = languageSetting == 0 ? static_cast<int>(c.poe.language) : languageSetting;
-    const char* language = QuickStashGame::GameLanguageHostName(static_cast<QuickStashGame::GameLanguage>(effective));
+    const QuickStashGame::ModLanguage language =
+        QuickStashGame::ResolveModLanguage(ctx, languageSetting, c.poe.language);
 
     if (const PluginSDK::Inventory* tab = QuickStashGame::FindOpenStashAny(ctx, all, bpId, displayW, displayH)) {
         const char* name = ctx->Inventory.GetName(tab->InventoryId);
@@ -247,39 +254,35 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
 void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state, const char* version,
                          const std::filesystem::path& pluginDir, const QuickStashGame::ScanSnapshot* live,
                          uint32_t readerFaults, int languageSetting) {
-    if (!BeginDiagnostics("The background reader's numbers and a one-click capture of what the plugin sees, for "
-                          "bug reports.", "qsDiagnostics"))
-        return;
-    Hint("For bug reports. Open your inventory and a stash tab, type in the game's search box, then press "
-         "Capture. Nothing is read until you do.");
+    if (!BeginDiagnostics(I18n::Tr("diag_tip"), "qsDiagnostics")) return;
+    Hint(I18n::Tr("diag_hint"));
     ImGui::Spacing();
 
     if (live) {
         const double ageMs = live->seq == 0 ? 0.0 :
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - live->at).count();
-        char reader[192];
-        std::snprintf(reader, sizeof(reader),
-                      "Background reader: pass %.1f ms, %d UI elements, %zu cached item texts, "
-                      "last reading %.0f ms ago, %u faults",
-                      live->passMs, live->uiNodesVisited, live->textCacheSize, ageMs, readerFaults);
-        Hint(reader);
+        Hint(I18n::TrF("diag_reader", { { "pass", Fixed(live->passMs, 1) },
+                                        { "elements", Num(live->uiNodesVisited) },
+                                        { "texts", Num(static_cast<long long>(live->textCacheSize)) },
+                                        { "age", Fixed(ageMs, 0) },
+                                        { "faults", Num(static_cast<long long>(readerFaults)) } })
+                 .c_str());
     }
 
-    if (ImGui::Button("Capture###qsDiagCapture")) {
+    if (ImGui::Button(I18n::TrId("diag_capture"))) {
         // The game's size: this tab may be drawn in a separate menu window, whose
         // display size is that window's own.
         const PluginSDK::ScreenSize game = ctx->Game.GetScreenSize();
         const ImVec2 disp = (game.Width > 0.0f && game.Height > 0.0f) ? ImVec2(game.Width, game.Height)
                                                                      : ImGui::GetIO().DisplaySize;
         state.capture = CaptureDiagnostics(ctx, version, disp.x, disp.y, languageSetting);
-        state.status.clear();
+        state.copy = DiagnosticsState::CopyStatus::None;
     }
-    Tip("Reads the inventories, the open tab's first 40 items with their mods,\n"
-        "and the visible game UI texts once. Expect a short hitch.");
+    Tip(I18n::Tr("diag_capture_tip"));
     DiagCapture& c = state.capture;
     if (c.valid) {
         ImGui::SameLine();
-        if (SubtleButton("Copy text report###qsDiagCopy")) {
+        if (SubtleButton(I18n::TrId("diag_copy"))) {
             ImGui::SetClipboardText(c.report.c_str());
             bool saved = false;
             if (!pluginDir.empty()) {
@@ -291,41 +294,59 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
                     saved = static_cast<bool>(out);
                 }
             }
-            state.status = "Copied " + std::to_string(c.report.size()) + " bytes" +
-                           (saved ? "; saved as config/text-report.txt" : "; the file could not be saved");
+            state.copiedBytes = c.report.size();
+            state.copy = saved ? DiagnosticsState::CopyStatus::Saved : DiagnosticsState::CopyStatus::NotSaved;
         }
-        Tip("Copies the report to the clipboard and saves it as config/text-report.txt\n"
-            "in the plugin folder. Attach it, with your game language and search text, to a bug report.");
+        Tip(I18n::Tr("diag_copy_tip"));
     }
-    if (!state.status.empty()) Hint(state.status.c_str());
+    if (state.copy != DiagnosticsState::CopyStatus::None) {
+        const std::string bytes = Num(static_cast<long long>(state.copiedBytes));
+        Hint((state.copy == DiagnosticsState::CopyStatus::Saved
+                  ? I18n::TrF("diag_copied_saved", { { "bytes", bytes } })
+                  : I18n::TrF("diag_copied_not_saved", { { "bytes", bytes } }))
+                 .c_str());
+    }
     if (!c.valid) {
         EndDiagnostics();
         return;
     }
 
     ImGui::Spacing();
-    ImGui::Text("Display %.0f x %.0f, %d inventories", c.displayW, c.displayH, c.inventoryCount);
-    ImGui::Text("Backpack: %s", c.backpack.empty() ? "not found" : c.backpack.c_str());
-    ImGui::Text("Open tab: %s", c.tabSummary.empty() ? "none" : c.tabSummary.c_str());
-    ImGui::Text("Search box: %s, text \"%s\" [%s], language %s", c.poe.found ? "found" : "not found",
-                c.poe.filter.c_str(), EncodingClass(c.poe.filter),
-                QuickStashGame::GameLanguageLabel(static_cast<int>(c.poe.language)));
+    ImGui::TextUnformatted(I18n::TrF("diag_display", { { "width", Fixed(c.displayW, 0) },
+                                                       { "height", Fixed(c.displayH, 0) },
+                                                       { "count", Num(c.inventoryCount) } })
+                               .c_str());
+    ImGui::TextUnformatted(
+        I18n::TrF("diag_backpack", { { "value", c.backpack.empty() ? std::string(I18n::Tr("diag_not_found")) : c.backpack } })
+            .c_str());
+    ImGui::TextUnformatted(
+        I18n::TrF("diag_open_tab", { { "value", c.tabSummary.empty() ? std::string(I18n::Tr("diag_none")) : c.tabSummary } })
+            .c_str());
+    ImGui::TextUnformatted(
+        I18n::TrF("diag_search_box",
+                  { { "state", c.poe.found ? I18n::Tr("diag_found") : I18n::Tr("diag_not_found") },
+                    { "text", c.poe.filter },
+                    { "encoding", EncodingClass(c.poe.filter) },
+                    { "language", I18n::Tr(QuickStashGame::GameLanguageLabelKey(static_cast<int>(c.poe.language))) } })
+            .c_str());
 
     const float tableH = ImGui::GetTextLineHeightWithSpacing() * 12.0f;
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
                                   ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit;
     if (ImGui::BeginTabBar("##qsDiagTabs")) {
-        if (ImGui::BeginTabItem("Inventories###qsDiagInv")) {
+        if (ImGui::BeginTabItem(I18n::TrId("diag_tab_inventories"))) {
             if (ImGui::BeginTable("##qsDiagInvTable", 8, flags, ImVec2(0.0f, tableH))) {
+                // Width 0 in a table without Resizable: each column fits its
+                // translated header and its cells every frame.
                 ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("Id", 0, ColumnWidth("00000"));
-                ImGui::TableSetupColumn("Name", 0, ColumnWidth("MainInventory1____"));
-                ImGui::TableSetupColumn("Items", 0, ColumnWidth("Items0"));
-                ImGui::TableSetupColumn("On screen", 0, ColumnWidth("On screen"));
-                ImGui::TableSetupColumn("Grid", 0, ColumnWidth("on, visible"));
-                ImGui::TableSetupColumn("Grid x, y", 0, ColumnWidth("0000, 0000"));
-                ImGui::TableSetupColumn("Cell", 0, ColumnWidth("000.0"));
-                ImGui::TableSetupColumn("Boxes", 0, ColumnWidth("000x00"));
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_id"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_name"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_items"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_on_screen"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_grid"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_grid_xy"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_cell"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_boxes"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
                 ImGui::TableHeadersRow();
                 for (const auto& r : c.inventories) {
                     ImGui::TableNextRow();
@@ -333,7 +354,9 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
                     ImGui::TableNextColumn(); ImGui::TextUnformatted(r.name.c_str());
                     ImGui::TableNextColumn(); ImGui::Text("%d", r.total);
                     ImGui::TableNextColumn(); ImGui::Text("%d / %d", r.onScreen, r.screenValid);
-                    ImGui::TableNextColumn(); ImGui::TextUnformatted(r.gridValid ? (r.gridOnScreen ? "on, visible" : "on") : "-");
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(r.gridValid ? (r.gridOnScreen ? I18n::Tr("diag_grid_on_visible") : I18n::Tr("diag_grid_on"))
+                                                       : "-");
                     ImGui::TableNextColumn(); ImGui::Text("%.0f, %.0f", r.gridX, r.gridY);
                     ImGui::TableNextColumn(); ImGui::Text("%.1f", r.cellSize);
                     ImGui::TableNextColumn(); ImGui::Text("%dx%d", r.boxesX, r.boxesY);
@@ -342,24 +365,31 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
             }
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Open tab items###qsDiagItems")) {
-            Hint("The text TAKE searches for each item: names, then mods. A word missing here cannot match.");
+        if (ImGui::BeginTabItem(I18n::TrId("diag_tab_items"))) {
+            Hint(I18n::Tr("diag_items_hint"));
             if (ImGui::BeginTable("##qsDiagItemTable", 5, flags, ImVec2(0.0f, tableH))) {
                 ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("Slot", 0, ColumnWidth("00,00"));
-                ImGui::TableSetupColumn("Name", 0, ImGui::GetFontSize() * 12.0f);
-                ImGui::TableSetupColumn("Corrupted", 0, ColumnWidth("Corrupted"));
-                ImGui::TableSetupColumn("Mods", 0, ImGui::GetFontSize() * 28.0f);
-                ImGui::TableSetupColumn("Aggregated stats", 0, ImGui::GetFontSize() * 14.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_slot"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_item_name"), ImGuiTableColumnFlags_WidthFixed,
+                                        ImGui::GetFontSize() * 12.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_corrupted"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_mods"), ImGuiTableColumnFlags_WidthFixed,
+                                        ImGui::GetFontSize() * 28.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_aggregated"), ImGuiTableColumnFlags_WidthFixed,
+                                        ImGui::GetFontSize() * 14.0f);
                 ImGui::TableHeadersRow();
                 for (const auto& r : c.items) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("%d,%d", r.slotX, r.slotY);
                     ImGui::TableNextColumn();
                     ImGui::TextUnformatted(r.uniqueName.empty() ? r.baseName.c_str() : r.uniqueName.c_str());
-                    ImGui::TableNextColumn(); ImGui::TextUnformatted(r.corrupted ? "yes" : "");
+                    ImGui::TableNextColumn(); ImGui::TextUnformatted(r.corrupted ? I18n::Tr("diag_yes") : "");
                     ImGui::TableNextColumn();
-                    if (r.modText.empty()) ImGui::TextDisabled("(no mods read)");
+                    if (r.modText.empty()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                        ImGui::TextUnformatted(I18n::Tr("diag_no_mods"));
+                        ImGui::PopStyleColor();
+                    }
                     else ImGui::TextUnformatted(OneLine(r.modText, 400).c_str());
                     ImGui::TableNextColumn(); ImGui::TextUnformatted(r.aggregated.c_str());
                 }
@@ -367,12 +397,17 @@ void DrawDiagnosticsCard(const PluginSDK::Context* ctx, DiagnosticsState& state,
             }
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("UI texts###qsDiagUi")) {
-            ImGui::TextDisabled("%d elements visited, %zu texts", c.uiVisited, c.uiTexts.size());
+        if (ImGui::BeginTabItem(I18n::TrId("diag_tab_ui"))) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::TextUnformatted(I18n::TrF("diag_ui_counts", { { "visited", Num(c.uiVisited) },
+                                                                 { "texts", Num(static_cast<long long>(c.uiTexts.size())) } })
+                                       .c_str());
+            ImGui::PopStyleColor();
             if (ImGui::BeginTable("##qsDiagUiTable", 2, flags, ImVec2(0.0f, tableH))) {
                 ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("x, y", 0, ColumnWidth("0000, 0000"));
-                ImGui::TableSetupColumn("Text", 0, ImGui::GetFontSize() * 24.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_xy"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                ImGui::TableSetupColumn(I18n::TrId("diag_col_text"), ImGuiTableColumnFlags_WidthFixed,
+                                        ImGui::GetFontSize() * 24.0f);
                 ImGui::TableHeadersRow();
                 for (const auto& t : c.uiTexts) {
                     ImGui::TableNextRow();

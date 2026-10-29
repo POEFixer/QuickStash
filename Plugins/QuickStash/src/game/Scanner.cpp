@@ -43,7 +43,8 @@ void Scanner::Start(const PluginSDK::Context* ctx) {
     m_seq = 0;
     m_nextDelayMs = 0;
     m_lastAreaCounter = 0;
-    m_lastLanguage = -1;
+    m_modLanguage = ModLanguage();
+    m_modLanguageSet = false;
     m_lastPublishedActive = true;
     m_lastScanRequest = {};
     m_textCache.Clear();
@@ -229,18 +230,18 @@ __declspec(noinline) void Scanner::PassCpp() {
             snap->language = poe.language;
             snap->uiNodesVisited = poe.nodesVisited;
             if (poe.found) {
-                const int setting = m_languageSetting.load(std::memory_order_relaxed);
-                const int effective = setting == static_cast<int>(GameLanguage::Auto)
-                                          ? static_cast<int>(poe.language) : setting;
-                if (effective != m_lastLanguage) {
-                    m_lastLanguage = effective;
+                ModLanguage language =
+                    ResolveModLanguage(ctx, m_languageSetting.load(std::memory_order_relaxed), poe.language);
+                if (!m_modLanguageSet || !(language == m_modLanguage)) {
+                    m_modLanguage = std::move(language);
+                    m_modLanguageSet = true;
                     m_textCache.Clear();
                 }
                 if (poe.filter != m_query.Raw())
                     m_query = SearchQuery(poe.filter);
-                const char* language = GameLanguageHostName(static_cast<GameLanguage>(effective));
                 WithdrawSelection sel = SelectWithdrawTargets(ctx, *stash, w, h, m_textCache, m_query,
-                                                              m_readMods.load(std::memory_order_relaxed), language);
+                                                              m_readMods.load(std::memory_order_relaxed),
+                                                              m_modLanguage);
                 snap->takeRects = std::move(sel.rects);
                 snap->takeQty = sel.totalQty;
                 snap->takePending = sel.pending;

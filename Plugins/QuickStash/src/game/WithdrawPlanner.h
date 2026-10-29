@@ -43,6 +43,48 @@ inline constexpr int kAggWaystoneDropChance   = 8210;
 
 const char* AggregatedLabel(int key);
 
+// The Stats.dat Id of an aggregated stat (FormatStatLocalized words it in the game language);
+// nullptr for any other key.
+inline const char* AggregatedStatId(int key) {
+    switch (key) {
+        case kAggItemRarity:           return "map_item_drop_rarity_+%_final_from_map";
+        case kAggPackSize:             return "map_pack_size_+%_final_from_map";
+        case kAggMonsterRarity:
+            return "map_number_of_magic_and_rare_packs_+%_final_and_rare_monster_modifiers_chance_+%_final_from_map";
+        case kAggMonsterEffectiveness: return "map_monster_potency_+%_final_from_map";
+        case kAggWaystoneDropChance:   return "map_map_item_drop_chance_+%_final_from_map";
+        default:                       return nullptr;
+    }
+}
+
+// The game language mod text is searchable in besides English.
+struct ModLanguage {
+    const char* hostName = nullptr;  // FormatStatLocalized's name; nullptr or "English": English only
+    std::string corrupted;           // the game's "Corrupted" in that language (ItemPopupCorrupted), "" = none
+
+    bool Localized() const {
+        return hostName && *hostName && std::string_view(hostName) != "English";
+    }
+    bool operator==(const ModLanguage& o) const {
+        return std::string_view(hostName ? hostName : "") == std::string_view(o.hostName ? o.hostName : "") &&
+               corrupted == o.corrupted;
+    }
+};
+
+// The language mod text is searchable in besides English: the player's choice (`setting`, a
+// GameLanguage), Automatic = the host's game language, else `labelLanguage` (the search label's
+// spelling, older hosts); with the game's own "Corrupted" in that language.
+ModLanguage ResolveModLanguage(const PluginSDK::Context* ctx, int setting, GameLanguage labelLanguage);
+
+// A "Corrupted" line for the English search, plus the game's own word when it is another one.
+inline void AppendCorrupted(std::string& s, const ModLanguage& language) {
+    s += "\nCorrupted";
+    if (!language.corrupted.empty() && language.corrupted != "Corrupted") {
+        s += '\n';
+        s += language.corrupted;
+    }
+}
+
 // Base type and unique name as the inventory listing gives them.
 std::string BuildNameSearchText(const PluginSDK::InventoryItem& item);
 
@@ -55,10 +97,10 @@ struct ModTextResult {
     bool        pending = false;  // localized text still loading on the host: ask again later
 };
 
-// Mod names, affix names, formatted stat lines (English, plus `language` when
-// it is not English), "Corrupted", waystone reward stats.
+// Mod names, affix names, formatted stat lines, "Corrupted" and the waystone reward stats, in
+// English plus `language` when it is not English.
 ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
-                           const char* language);
+                           const ModLanguage& language);
 
 // Searchable text per item, folded for matching, cached by item address and
 // metadata path across passes. Owned and used by one thread.
@@ -71,7 +113,7 @@ public:
     // Folded searchable text. `complete` is false while a name or mod read for
     // this item is still waiting for this pass's budget.
     const std::string& Text(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
-                            bool readMods, const char* language, bool& complete);
+                            bool readMods, const ModLanguage& language, bool& complete);
 
 private:
     struct Entry {
@@ -104,6 +146,6 @@ struct WithdrawSelection {
 
 WithdrawSelection SelectWithdrawTargets(const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
                                         float displayW, float displayH, ItemTextCache& cache,
-                                        const SearchQuery& query, bool readMods, const char* language);
+                                        const SearchQuery& query, bool readMods, const ModLanguage& language);
 
 } // namespace QuickStashGame

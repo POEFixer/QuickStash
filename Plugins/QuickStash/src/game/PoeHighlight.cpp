@@ -116,9 +116,17 @@ std::string TrimAscii(const std::string& s) {
     return s.substr(start, end - start);
 }
 
-int MatchHighlightAnchor(const std::string& raw) {
+HostAnchor MakeHostAnchor(const std::string& label, GameLanguage language) {
+    HostAnchor a;
+    a.folded = FoldCase(TrimAscii(label));
+    a.language = language;
+    return a;
+}
+
+int MatchHighlightAnchor(const std::string& raw, const HostAnchor& host) {
     const std::string s = FoldCase(TrimAscii(raw));
     if (s.empty()) return -1;
+    if (!host.folded.empty() && s == host.folded) return static_cast<int>(host.language);
     for (const auto& [text, lang] : Tables().anchors)
         if (s == text) return static_cast<int>(lang);
     return -1;
@@ -134,11 +142,11 @@ bool IsPlaceholderText(const std::string& raw) {
     return false;
 }
 
-PoeHighlight SelectHighlight(const std::vector<UiText>& texts) {
+PoeHighlight SelectHighlight(const std::vector<UiText>& texts, const HostAnchor& host) {
     PoeHighlight r;
     const UiText* anchor = nullptr;
     for (const auto& e : texts) {
-        const int lang = MatchHighlightAnchor(e.text);
+        const int lang = MatchHighlightAnchor(e.text, host);
         if (lang >= 0) {
             anchor = &e;
             r.language = static_cast<GameLanguage>(lang);
@@ -166,7 +174,7 @@ PoeHighlight SelectHighlight(const std::vector<UiText>& texts) {
     for (const auto& e : texts) {
         if (&e == anchor) continue;
         if (TrimAscii(e.text).empty()) continue;
-        if (MatchHighlightAnchor(e.text) >= 0) continue;
+        if (MatchHighlightAnchor(e.text, host) >= 0) continue;
         const float dx = e.x - anchor->x;
         float dy = e.y - anchor->y;
         if (dy < 0.0f) dy = -dy;
@@ -219,7 +227,14 @@ std::vector<UiText> CollectUiTexts(const PluginSDK::Context* ctx, size_t maxText
 PoeHighlight ReadPoeHighlight(const PluginSDK::Context* ctx) {
     int visited = 0;
     const std::vector<UiText> texts = CollectUiTexts(ctx, static_cast<size_t>(kMaxVisited), &visited);
-    PoeHighlight r = SelectHighlight(texts);
+    // The game's own label in the game language the host knows ("" on an older host).
+    HostAnchor host;
+    if (ctx) {
+        const PluginSDK::GameLanguageInfo info = ctx->Lang.GameLanguage();
+        host = MakeHostAnchor(ctx->Lang.GameString("StashPanelSearchLabel"),
+                              info.known ? GameLanguageFromCsdName(info.csdName) : GameLanguage::Auto);
+    }
+    PoeHighlight r = SelectHighlight(texts, host);
     r.nodesVisited = visited;
     return r;
 }

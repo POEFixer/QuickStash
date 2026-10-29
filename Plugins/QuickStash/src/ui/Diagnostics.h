@@ -1,6 +1,8 @@
 // The collapsed Diagnostics card: one-click capture of what the plugin sees
 // (inventories, the open tab's searchable text, the game's search box, a
 // shareable text report). Nothing here runs unless the player presses Capture.
+// The card's texts follow the program language; the captured values and the
+// text report stay as read (English labels), for bug reports.
 //
 // Copyright (C) Omer Faruk ARPA and POEFixer contributors.
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
@@ -61,7 +63,10 @@ struct DiagCapture {
 
 struct DiagnosticsState {
     DiagCapture capture;
-    std::string status;
+    // The last "Copy text report", worded when drawn (in the program language).
+    enum class CopyStatus { None, Saved, NotSaved };
+    CopyStatus copy = CopyStatus::None;
+    size_t copiedBytes = 0;
 };
 
 // Reads everything once (render thread, on request only).

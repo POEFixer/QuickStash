@@ -22,6 +22,20 @@ const char* AggregatedLabel(int key) {
     }
 }
 
+ModLanguage ResolveModLanguage(const PluginSDK::Context* ctx, int setting, GameLanguage labelLanguage) {
+    GameLanguage host = GameLanguage::Auto;
+    if (ctx) {
+        const PluginSDK::GameLanguageInfo info = ctx->Lang.GameLanguage();
+        if (info.known) host = GameLanguageFromCsdName(info.csdName);
+    }
+    const GameLanguage effective = EffectiveGameLanguage(setting, host, labelLanguage);
+    ModLanguage language;
+    language.hostName = GameLanguageHostName(effective);
+    if (ctx && language.Localized())
+        language.corrupted = ctx->Lang.GameString("ItemPopupCorrupted", GameLanguageGameCode(effective));
+    return language;
+}
+
 std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     std::string s;
     s.reserve(item.BaseTypeName.size() + item.UniqueName.size() + 1);
@@ -49,16 +63,16 @@ std::string BuildDirectNameText(const PluginSDK::Context* ctx, const PluginSDK::
 }
 
 ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
-                           const char* language) {
+                           const ModLanguage& language) {
     ModTextResult r;
     if (!ctx || !item.Address) return r;
     // Liveness check first: an item that moved since the listing reads empty.
     if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return r;
 
-    const bool localized = language && *language && std::strcmp(language, "English") != 0;
+    const bool localized = language.Localized();
     const auto mods = ctx->Inventory.ReadItemMods(item.Address);
     std::string& s = r.text;
-    if (mods.Valid && mods.IsCorrupted) s += "\nCorrupted";
+    if (mods.Valid && mods.IsCorrupted) AppendCorrupted(s, language);
     const std::vector<PluginSDK::Mod>* groups[] = {
         &mods.ImplicitMods, &mods.ExplicitMods, &mods.EnchantMods, &mods.HellscapeMods, &mods.CrucibleMods};
     for (const auto* g : groups) {
@@ -72,7 +86,7 @@ ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::Inven
             if (localized) {
                 bool pending = false;
                 const std::string loc = ctx->Inventory.FormatStatLocalized(m.StatKey, m.Value0, m.Value1,
-                                                                           language, &pending);
+                                                                           language.hostName, &pending);
                 if (pending) r.pending = true;
                 if (!loc.empty() && loc != line) { s += '\n'; s += loc; }
             }
@@ -83,6 +97,15 @@ ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::Inven
         if (const char* lbl = AggregatedLabel(kv.first)) {
             s += '\n';
             s += lbl;
+            // In a non-English game, also the line the game itself shows for the stat.
+            const char* statId = AggregatedStatId(kv.first);
+            if (localized && statId) {
+                bool pending = false;
+                const std::string loc = ctx->Inventory.FormatStatLocalized(
+                    statId, static_cast<float>(kv.second), 0.0f, language.hostName, &pending);
+                if (pending) r.pending = true;
+                if (!loc.empty()) { s += '\n'; s += loc; }
+            }
         }
     }
     return r;
@@ -95,7 +118,7 @@ void ItemTextCache::BeginPass() {
 }
 
 const std::string& ItemTextCache::Text(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
-                                       bool readMods, const char* language, bool& complete) {
+                                       bool readMods, const ModLanguage& language, bool& complete) {
     Entry& e = m_map[item.Address];
     if (e.path != item.Path) {
         e = Entry{};
@@ -179,7 +202,7 @@ std::optional<ScreenRect> ResolveItemRect(const PluginSDK::Inventory& inv, const
 
 WithdrawSelection SelectWithdrawTargets(const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
                                         float displayW, float displayH, ItemTextCache& cache,
-                                        const SearchQuery& query, bool readMods, const char* language) {
+                                        const SearchQuery& query, bool readMods, const ModLanguage& language) {
     WithdrawSelection sel;
     cache.BeginPass();
     std::vector<Hit> hits;

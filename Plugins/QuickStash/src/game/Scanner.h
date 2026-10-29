@@ -101,7 +101,8 @@ private:
     uint64_t m_seq = 0;
     int      m_nextDelayMs = 150;
     uint64_t m_lastAreaCounter = 0;
-    int      m_lastLanguage = -1;
+    ModLanguage m_modLanguage;       // the language the cached item texts were built in
+    bool        m_modLanguageSet = false;
     bool     m_lastPublishedActive = true;
     std::chrono::steady_clock::time_point m_lastScanRequest{};
     ItemTextCache m_textCache;

@@ -103,6 +103,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Settings.h" />
+    <ClInclude Include="src\lang_en.generated.h" />
     <ClInclude Include="src\game\Languages.h" />
     <ClInclude Include="src\game\PanelDetector.h" />
     <ClInclude Include="src\game\PoeHighlight.h" />
@@ -116,6 +117,7 @@
     <ClInclude Include="src\ui\ExclusionGrid.h" />
     <ClInclude Include="src\ui\Overlay.h" />
     <ClInclude Include="src\ui\SettingsUi.h" />
+    <ClInclude Include="src\ui\TextUtil.h" />
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginAbi.h" />
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginSDK.h" />
   </ItemGroup>

@@ -1,6 +1,6 @@
 # Quick Stash
 
-Current version: 1.4.7
+Current version: 1.4.8
 
 Requires POE2Fixer 364 or newer.
 

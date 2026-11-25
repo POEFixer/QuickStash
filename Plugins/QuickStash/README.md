@@ -37,9 +37,11 @@ With a vendor open, Ctrl+click sells; with a trade window open, it offers the it
 
 The search follows the game's rules: words separated by spaces must all match
 (in any order), `"quoted text"` is one phrase, `!word` excludes, `a|b` matches
-either, and regular expressions work. Item names, mods (when "Search item mods
-too" is on), `corrupted` and waystone reward stats (item rarity, pack size,
-monster rarity, monster effectiveness, waystone drop chance) can be matched.
+either, and regular expressions work. Item names, the item class line the game
+copies with the item (`Item Class: Helmets`: `helm` finds every helmet, an
+Ancestral Tiara too; `jewel` every jewel), mods (when "Search item mods too" is
+on), `corrupted` and waystone reward stats (item rarity, pack size, monster
+rarity, monster effectiveness, waystone drop chance) can be matched.
 While the plugin is still reading item mods the button shows `...` and waits.
 
 TAKE never touches your backpack, equipment, flasks or charms, and ignores the
@@ -79,7 +81,8 @@ Turn off POEFixer's own auto-stash while you use this plugin: both use Ctrl+clic
   game client's language to search its wording too. *Automatic* takes the game
   language POEFixer knows (an older POEFixer: the language of the search box
   label). In that language the search also finds the game's own word for
-  Corrupted and the waystone reward lines (Item Rarity, Monster Pack Size, ...).
+  Corrupted, the item class line and the waystone reward lines (Item Rarity,
+  Monster Pack Size, ...).
 - *Outline the items TAKE will grab* and *Outline colour*.
 
 **Buttons on screen**
@@ -113,6 +116,9 @@ earlier Quick Stash versions are read and kept.
   stays hidden rather than guess.
 - Localized mod wording depends on the game text the host has for that
   language; English mod text is always included.
+- Item classes come from the game data the plugin version was built with, in
+  English plus the *Mod text language*: a base type a later game patch adds is
+  found by its name and mods until the plugin is updated.
 - Chat being open is not detected: close chat before a run (Ctrl+click in chat
   links the item instead of moving it).
 

@@ -4,6 +4,7 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "WithdrawPlanner.h"
 
+#include "ItemClasses.h"
 #include "PanelDetector.h"
 
 #include <algorithm>
@@ -42,6 +43,13 @@ std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     s += item.BaseTypeName;
     s += '\n';
     s += item.UniqueName;
+    return s;
+}
+
+std::string BuildClassSearchText(const std::string& metadataPath, const ModLanguage& language) {
+    std::string s;
+    if (const ItemClassText* cls = FindItemClass(metadataPath))
+        AppendItemClass(s, *cls, language.Localized() ? ItemClassLanguageColumn(language.hostName) : -1);
     return s;
 }
 
@@ -130,6 +138,13 @@ const std::string& ItemTextCache::Text(const PluginSDK::Context* ctx, const Plug
         e.listFolded = FoldCase(source);
         e.combinedValid = false;
     }
+    const std::string_view classLanguage = language.hostName ? language.hostName : "";
+    if (!e.classRead || e.classLanguage != classLanguage) {
+        e.classFolded = FoldCase(BuildClassSearchText(item.Path, language));
+        e.classLanguage = classLanguage;
+        e.classRead = true;
+        e.combinedValid = false;
+    }
     complete = true;
     if (!e.namesRead) {
         if (m_nameBudget > 0) {
@@ -156,6 +171,7 @@ const std::string& ItemTextCache::Text(const PluginSDK::Context* ctx, const Plug
     const bool withMods = readMods && !e.modsFolded.empty();
     if (!e.combinedValid || e.combinedMods != withMods) {
         e.combined = e.listFolded;
+        e.combined += e.classFolded;
         e.combined += e.namesFolded;
         if (withMods) e.combined += e.modsFolded;
         e.combinedMods = withMods;

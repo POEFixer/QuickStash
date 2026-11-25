@@ -39,6 +39,9 @@
     <ClCompile Include="src\game\WithdrawPlanner.cpp">
       <Filter>src\game</Filter>
     </ClCompile>
+    <ClCompile Include="src\game\ItemClasses.cpp">
+      <Filter>src\game</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\Diagnostics.cpp">
       <Filter>src\ui</Filter>
     </ClCompile>
@@ -87,6 +90,12 @@
       <Filter>src\game</Filter>
     </ClInclude>
     <ClInclude Include="src\game\WithdrawPlanner.h">
+      <Filter>src\game</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game\ItemClasses.h">
+      <Filter>src\game</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game\ItemClasses.generated.h">
       <Filter>src\game</Filter>
     </ClInclude>
     <ClInclude Include="src\input\Win32Input.h">

@@ -41,6 +41,7 @@ struct DiagItemRow {
     std::string uniqueName;
     std::string path;
     std::string directBase;
+    std::string itemClass;  // the class lines TAKE searches, '|' between them ("" = not in the table)
     std::string modText;    // one line, '|' between mod lines
     std::string aggregated; // "key:value " pairs
     bool corrupted = false;

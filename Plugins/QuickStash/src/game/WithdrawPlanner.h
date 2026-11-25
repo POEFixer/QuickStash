@@ -88,6 +88,12 @@ inline void AppendCorrupted(std::string& s, const ModLanguage& language) {
 // Base type and unique name as the inventory listing gives them.
 std::string BuildNameSearchText(const PluginSDK::InventoryItem& item);
 
+// The class line of the item's Ctrl+C copy text ("Item Class: Helmets") in English plus `language`
+// when it is not English, as '\n'-led lines; "" for a metadata path the plugin's class table does
+// not know. The game's Highlight Items search matches the copy text line by line, so "helm"
+// highlights an Ancestral Tiara and "class" every item.
+std::string BuildClassSearchText(const std::string& metadataPath, const ModLanguage& language);
+
 // Names read straight from the item when they differ from the listing's
 // (helps clients whose listing names are not localized).
 std::string BuildDirectNameText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item);
@@ -120,6 +126,9 @@ private:
         std::string path;
         std::string listSource;  // BaseTypeName + '\n' + UniqueName the fold was built from
         std::string listFolded;
+        std::string classLanguage;  // ModLanguage::hostName the class lines were built in
+        std::string classFolded;
+        bool classRead = false;
         std::string namesFolded;
         std::string modsFolded;
         std::string combined;

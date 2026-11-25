@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.9
+
+- TAKE also finds items by their class, as the game's search does: it matches the "Item Class: Helmets" line of the item's text, so "helm" takes every helmet (an Ancestral Tiara too) and "jewel" every jewel, in English and in the mod text language (Automatic: the game language). The class names come from the game's own data.
+- The Diagnostics report lists each item's class line.
+
 ## 1.4.8
 
 - Built with the current plugin SDK: a controller that is not XInput reports no port (-1) even when ready.

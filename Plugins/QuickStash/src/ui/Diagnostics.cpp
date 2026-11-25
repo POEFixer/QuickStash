@@ -150,7 +150,8 @@ std::string BuildReport(const DiagCapture& c, const char* version) {
     int row = 0;
     for (const auto& it : c.items) {
         ++row;
-        const std::string names = QuickStashGame::FoldCase(it.baseName + "\n" + it.uniqueName + "\n" + it.directBase);
+        const std::string names =
+            QuickStashGame::FoldCase(it.baseName + "\n" + it.uniqueName + "\n" + it.directBase + it.itemClass);
         const bool nameHit = !query.Empty() && query.Matches(names);
         const bool modHit = !query.Empty() && query.Matches(QuickStashGame::FoldCase(it.modText));
         nameHits += nameHit ? 1 : 0;
@@ -160,6 +161,7 @@ std::string BuildReport(const DiagCapture& c, const char* version) {
         AppendField(body, "path", it.path, 160);
         AppendField(body, "list base", it.baseName, 160);
         AppendField(body, "direct base", it.directBase, 160);
+        AppendField(body, "class", it.itemClass, 160);
         if (!it.uniqueName.empty()) AppendField(body, "list unique", it.uniqueName, 160);
         AppendField(body, "mods", it.modText, 600);
     }
@@ -234,6 +236,7 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
             row.baseName = it.BaseTypeName;
             row.uniqueName = it.UniqueName;
             row.path = it.Path;
+            row.itemClass = QuickStashGame::BuildClassSearchText(it.Path, language);
             if (it.Address) {
                 row.directBase = ctx->Inventory.ReadItemBaseTypeName(it.Address);
                 if (!row.directBase.empty()) {

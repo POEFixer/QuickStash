@@ -90,6 +90,8 @@
   <ItemGroup>
     <ClCompile Include="src\QuickStash.cpp" />
     <ClCompile Include="src\Settings.cpp" />
+    <ClCompile Include="src\game\CopyText.cpp" />
+    <ClCompile Include="src\game\GameHighlight.cpp" />
     <ClCompile Include="src\game\ItemClasses.cpp" />
     <ClCompile Include="src\game\PoeHighlight.cpp" />
     <ClCompile Include="src\game\Scanner.cpp" />
@@ -105,6 +107,8 @@
   <ItemGroup>
     <ClInclude Include="src\Settings.h" />
     <ClInclude Include="src\lang_en.generated.h" />
+    <ClInclude Include="src\game\CopyText.h" />
+    <ClInclude Include="src\game\GameHighlight.h" />
     <ClInclude Include="src\game\ItemClasses.generated.h" />
     <ClInclude Include="src\game\ItemClasses.h" />
     <ClInclude Include="src\game\Languages.h" />

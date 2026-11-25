@@ -4,6 +4,7 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "WithdrawPlanner.h"
 
+#include "CopyText.h"
 #include "ItemClasses.h"
 #include "PanelDetector.h"
 
@@ -70,17 +71,39 @@ std::string BuildDirectNameText(const PluginSDK::Context* ctx, const PluginSDK::
     return s;
 }
 
+std::string BuildFactText(const PluginSDK::InventoryItem& item, const PluginSDK::ItemMods* mods,
+                          const ModLanguage& language) {
+    ItemFacts facts;
+    if (const ItemClassText* cls = FindItemClass(item.Path)) facts.classId = ItemClassId(*cls);
+    facts.waystoneTier = ParseWaystoneTier(item.Path);
+    if (mods && mods->Valid) {
+        facts.modsRead = true;
+        facts.rarity = mods->Rarity;
+        facts.itemLevel = mods->ItemLevel;
+        facts.requiredLevel = mods->RequiredLevel;
+        facts.identified = mods->IsIdentified;
+    }
+    std::string s;
+    AppendFactLines(s, facts, language.Localized() ? ItemClassLanguageColumn(language.hostName) : -1);
+    if (mods && mods->Valid && mods->IsCorrupted) AppendCorrupted(s, language);
+    return s;
+}
+
 ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
                            const ModLanguage& language) {
+    if (!ctx || !item.Address) return {};
+    // Liveness check first: an item that moved since the listing reads empty.
+    if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return {};
+    const PluginSDK::ItemMods mods = ctx->Inventory.ReadItemMods(item.Address);
+    return BuildModText(ctx, item, mods, language);
+}
+
+ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
+                           const PluginSDK::ItemMods& mods, const ModLanguage& language) {
     ModTextResult r;
     if (!ctx || !item.Address) return r;
-    // Liveness check first: an item that moved since the listing reads empty.
-    if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return r;
-
     const bool localized = language.Localized();
-    const auto mods = ctx->Inventory.ReadItemMods(item.Address);
     std::string& s = r.text;
-    if (mods.Valid && mods.IsCorrupted) AppendCorrupted(s, language);
     const std::vector<PluginSDK::Mod>* groups[] = {
         &mods.ImplicitMods, &mods.ExplicitMods, &mods.EnchantMods, &mods.HellscapeMods, &mods.CrucibleMods};
     for (const auto* g : groups) {
@@ -146,6 +169,54 @@ const std::string& ItemTextCache::Text(const PluginSDK::Context* ctx, const Plug
         e.combinedValid = false;
     }
     complete = true;
+    // One mods read serves the copy text lines (rarity, item level, requirement; always) and the
+    // mod lines (only with "Search item mods too").
+    bool needFacts = !e.factsRead || e.factsLanguage != classLanguage;
+    bool needMods = readMods && !e.modsRead;
+    if (needFacts || needMods) {
+        // A class that tells every line by itself (currency, gems, ...) needs no mods read for them,
+        // and a class without a Mods component has no mod lines: the host's read of such an item is a
+        // slow failed lookup.
+        const ItemClassText* cls = FindItemClass(item.Path);
+        if (needMods && cls && ClassWithoutMods(ItemClassId(*cls))) {
+            e.modsFolded.clear();
+            e.modsRead = true;
+            e.combinedValid = false;
+            needMods = false;
+        }
+        if (needFacts && cls && !FactsNeedModsRead(ItemClassId(*cls))) {
+            e.factsFolded = FoldCase(BuildFactText(item, nullptr, language));
+            e.factsLanguage = classLanguage;
+            e.factsRead = true;
+            e.combinedValid = false;
+            needFacts = false;
+        }
+    }
+    if (needFacts || needMods) {
+        if (m_modBudget > 0) {
+            --m_modBudget;
+            // Liveness check first: an item that moved since the listing reads empty.
+            const bool alive = ctx && item.Address && !ctx->Inventory.ReadItemBaseTypeName(item.Address).empty();
+            PluginSDK::ItemMods mods{};
+            if (alive) mods = ctx->Inventory.ReadItemMods(item.Address);
+            const PluginSDK::ItemMods* read = (alive && mods.Valid) ? &mods : nullptr;
+            if (needFacts) {
+                e.factsFolded = FoldCase(BuildFactText(item, read, language));
+                e.factsLanguage = classLanguage;
+                e.factsRead = true;
+                e.combinedValid = false;
+            }
+            if (needMods) {
+                ModTextResult modText = read ? BuildModText(ctx, item, *read, language) : ModTextResult{};
+                e.modsFolded = FoldCase(modText.text);
+                e.modsRead = !modText.pending;  // localized text still loading: read again next pass
+                if (modText.pending) complete = false;
+                e.combinedValid = false;
+            }
+        } else {
+            complete = false;
+        }
+    }
     if (!e.namesRead) {
         if (m_nameBudget > 0) {
             --m_nameBudget;
@@ -156,22 +227,11 @@ const std::string& ItemTextCache::Text(const PluginSDK::Context* ctx, const Plug
             complete = false;
         }
     }
-    if (readMods && !e.modsRead) {
-        if (m_modBudget > 0) {
-            --m_modBudget;
-            ModTextResult mods = BuildModText(ctx, item, language);
-            e.modsFolded = FoldCase(mods.text);
-            e.modsRead = !mods.pending;  // localized text still loading: read again next pass
-            if (mods.pending) complete = false;
-            e.combinedValid = false;
-        } else {
-            complete = false;
-        }
-    }
     const bool withMods = readMods && !e.modsFolded.empty();
     if (!e.combinedValid || e.combinedMods != withMods) {
         e.combined = e.listFolded;
         e.combined += e.classFolded;
+        e.combined += e.factsFolded;
         e.combined += e.namesFolded;
         if (withMods) e.combined += e.modsFolded;
         e.combinedMods = withMods;
@@ -218,16 +278,22 @@ std::optional<ScreenRect> ResolveItemRect(const PluginSDK::Inventory& inv, const
 
 WithdrawSelection SelectWithdrawTargets(const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
                                         float displayW, float displayH, ItemTextCache& cache,
-                                        const SearchQuery& query, bool readMods, const ModLanguage& language) {
+                                        const SearchQuery& query, bool readMods, const ModLanguage& language,
+                                        const GameHighlightResult* game) {
     WithdrawSelection sel;
-    cache.BeginPass();
+    // The game's own result when it is readable; the plugin's search otherwise.
+    const bool useGame = game && game->verdict != GameVerdict::Unavailable && !query.Empty();
+    if (useGame && game->verdict == GameVerdict::Pending) sel.pending = true;
+    if (!useGame) cache.BeginPass();
     std::vector<Hit> hits;
     hits.reserve(inv.Items.size());
     int qty = 0;
     for (const auto& item : inv.Items) {
         const auto rect = ResolveItemRect(inv, item, displayW, displayH);
         if (!rect) continue;
-        if (!query.Empty()) {
+        if (useGame) {
+            if (!game->matched.contains(item.Address)) continue;
+        } else if (!query.Empty()) {
             bool complete = true;
             const std::string& text = cache.Text(ctx, item, readMods, language, complete);
             if (!complete) sel.pending = true;

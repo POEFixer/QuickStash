@@ -4,6 +4,8 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "Scanner.h"
 
+#include "CopyText.h"
+#include "ItemClasses.h"
 #include "PanelDetector.h"
 #include "PoeHighlight.h"
 #include "TransferPlanner.h"
@@ -49,6 +51,8 @@ void Scanner::Start(const PluginSDK::Context* ctx) {
     m_lastScanRequest = {};
     m_textCache.Clear();
     m_query = SearchQuery();
+    m_queryColumn = -2;
+    m_gameHighlight.Reset();
     m_lastHighlight = PoeHighlight();
     m_lastHighlightOk = false;
     m_lastPassPending = false;
@@ -72,10 +76,11 @@ std::shared_ptr<const ScanSnapshot> Scanner::Latest() const {
     return m_latest;
 }
 
-void Scanner::SetOptions(bool takeEnabled, bool readMods, int languageSetting) {
+void Scanner::SetOptions(bool takeEnabled, bool readMods, int languageSetting, bool useGameHighlight) {
     m_takeEnabled.store(takeEnabled, std::memory_order_relaxed);
     m_readMods.store(readMods, std::memory_order_relaxed);
     m_languageSetting.store(languageSetting, std::memory_order_relaxed);
+    m_useGameHighlight.store(useGameHighlight, std::memory_order_relaxed);
 }
 
 void Scanner::SetDisplaySize(float w, float h) {
@@ -125,6 +130,7 @@ void Scanner::Run() {
             m_faults.fetch_add(1, std::memory_order_relaxed);
             ++consecutive;
             m_textCache.Clear();
+            m_gameHighlight.Reset();
             if (consecutive >= kFaultBackoff) {
                 if (!reported && m_ctx) {
                     m_ctx->Log.Error("Quick Stash: the background reader keeps failing; retrying every 2 s");
@@ -158,11 +164,13 @@ __declspec(noinline) void Scanner::PassCpp() {
 
         if (!ctx->Game.IsInGame()) {
             m_textCache.Clear();
+            m_gameHighlight.Reset();
             PublishInactive();
             m_nextDelayMs = kIdleDelayMs;
             return;
         }
         if (!ctx->Game.IsForeground()) {
+            m_gameHighlight.Reset();
             PublishInactive();
             m_nextDelayMs = kIdleDelayMs;
             return;
@@ -172,6 +180,7 @@ __declspec(noinline) void Scanner::PassCpp() {
         if (area != m_lastAreaCounter) {
             m_lastAreaCounter = area;
             m_textCache.Clear();
+            m_gameHighlight.Reset();
         }
 
         if (m_lastScanRequest.time_since_epoch().count() == 0 || MsSince(m_lastScanRequest, t0) >= kScanRequestMs) {
@@ -197,6 +206,7 @@ __declspec(noinline) void Scanner::PassCpp() {
             snap->backpackFreeCells = FreeCells(*bp);
         }
         if (!bp || !bp->Grid.Valid) {
+            m_gameHighlight.Reset();
             snap->passMs = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
             Publish(std::move(snap));
             m_nextDelayMs = kClosedDelayMs;
@@ -237,26 +247,56 @@ __declspec(noinline) void Scanner::PassCpp() {
                     m_modLanguageSet = true;
                     m_textCache.Clear();
                 }
-                if (poe.filter != m_query.Raw())
-                    m_query = SearchQuery(poe.filter);
+                const int column =
+                    m_modLanguage.Localized() ? ItemClassLanguageColumn(m_modLanguage.hostName) : -1;
+                if (poe.filter != m_query.Raw() || column != m_queryColumn) {
+                    const SearchFilters filters = MakeSearchFilters(column);
+                    m_query = SearchQuery(poe.filter, &filters);
+                    m_queryColumn = column;
+                }
+                // The game's own result for the typed text, when it is readable.
+                GameHighlightResult game;
+                const bool tryGame = m_useGameHighlight.load(std::memory_order_relaxed) && !m_query.Empty();
+                if (tryGame) {
+                    std::vector<uintptr_t> onScreen;
+                    onScreen.reserve(stash->Items.size());
+                    for (const auto& item : stash->Items)
+                        if (item.Address && ResolveItemRect(*stash, item, w, h)) onScreen.push_back(item.Address);
+                    game = m_gameHighlight.Read(ctx, onScreen, poe.filter, t0);
+                } else {
+                    m_gameHighlight.Reset();
+                    game.why = m_query.Empty() ? "no search text" : "turned off in the settings";
+                }
                 WithdrawSelection sel = SelectWithdrawTargets(ctx, *stash, w, h, m_textCache, m_query,
                                                               m_readMods.load(std::memory_order_relaxed),
-                                                              m_modLanguage);
+                                                              m_modLanguage, tryGame ? &game : nullptr);
                 snap->takeRects = std::move(sel.rects);
                 snap->takeQty = sel.totalQty;
                 snap->takePending = sel.pending;
-                if (sel.pending) m_nextDelayMs = kPendingDelayMs;
+                snap->takeFromGame = tryGame && game.verdict != GameVerdict::Unavailable;
+                snap->gameItemsOnScreen = game.itemsOnScreen;
+                snap->gameItemsWithElement = game.itemsWithElement;
+                snap->gameWhy = game.why;
+                // While the game decides, the search box is read afresh every pass (no reuse) at the
+                // normal cadence: a stale text must never settle the game's states.
+                if (sel.pending && !snap->takeFromGame) m_nextDelayMs = kPendingDelayMs;
+            } else {
+                m_gameHighlight.Reset();
             }
+        } else {
+            m_gameHighlight.Reset();   // stash closed, a run going, TAKE off: start over next time
         }
-        m_lastPassPending = snap->takePending;
+        m_lastPassPending = snap->takePending && !snap->takeFromGame;
 
         snap->passMs = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
         Publish(std::move(snap));
     } catch (const std::exception&) {
         m_lastHighlightOk = false;
+        m_gameHighlight.Reset();
         m_nextDelayMs = kClosedDelayMs;
     } catch (...) {
         m_lastHighlightOk = false;
+        m_gameHighlight.Reset();
         m_nextDelayMs = kClosedDelayMs;
     }
 }

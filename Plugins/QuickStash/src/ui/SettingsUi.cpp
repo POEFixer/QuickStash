@@ -107,6 +107,9 @@ void DrawSectionHowTo(const QuickStashGame::ScanSnapshot* live, bool transferRun
                 std::string line = I18n::TrF("howto_take_would_grab",
                                              { { "filter", live->filter },
                                                { "count", Num(static_cast<int>(live->takeRects.size())) } });
+                if (!live->filter.empty())
+                    line += std::string(" ") + (live->takeFromGame ? I18n::Tr("howto_source_game")
+                                                                   : I18n::Tr("howto_source_plugin"));
                 if (live->takePending) line += std::string(" ") + I18n::Tr("howto_still_reading");
                 ImGui::TextUnformatted(line.c_str());
             } else {
@@ -165,6 +168,7 @@ bool DrawSectionTake(Settings& s) {
 
     changed |= Check(I18n::Tr("take_show_button"), "qsShowTake", &s.showTakeButton, I18n::Tr("take_show_button_tip"));
     ImGui::BeginDisabled(!s.showTakeButton);
+    changed |= Check(I18n::Tr("take_use_game"), "qsUseGame", &s.useGameHighlight, I18n::Tr("take_use_game_tip"));
     changed |= Check(I18n::Tr("take_read_mods"), "qsReadMods", &s.readMods, I18n::Tr("take_read_mods_tip"));
     {
         const char* languageLabel = I18n::Tr("take_mod_language");

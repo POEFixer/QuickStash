@@ -32,7 +32,7 @@ std::string KeyOf(std::string_view s) {
 // no name there.
 std::string ClassLine(const ItemClassText& cls, size_t column) {
     const char* name = cls.name[column];
-    const char* label = ItemClassData::kClassLabel[column];
+    const char* label = ItemClassData::kTexts[column].itemClass;
     if (!name || !*name || !label || !*label) return {};
     std::string line(label);
     line += ": ";

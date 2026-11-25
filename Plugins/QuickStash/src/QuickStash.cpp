@@ -32,7 +32,7 @@
 POEFIXER_PLUGIN_INFO(
     "QuickStash",
     "Quick Stash",
-    "1.4.9",
+    "1.5.0",
     "Omer Faruk ARPA, POEFixer",
     "One-click Transfer from your backpack into the open stash, vendor or trade window, and TAKE from the stash by the game's own item search.")
 
@@ -254,7 +254,8 @@ private:
     }
 
     void PushOptions() {
-        m_scanner.SetOptions(m_settings.showTakeButton, m_settings.readMods, m_settings.modLanguage);
+        m_scanner.SetOptions(m_settings.showTakeButton, m_settings.readMods, m_settings.modLanguage,
+                             m_settings.useGameHighlight);
     }
 
     void ResetClickTrackers() {

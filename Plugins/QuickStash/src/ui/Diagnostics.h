@@ -42,6 +42,9 @@ struct DiagItemRow {
     std::string path;
     std::string directBase;
     std::string itemClass;  // the class lines TAKE searches, '|' between them ("" = not in the table)
+    std::string facts;      // the copy text lines the plugin rebuilds (rarity, item level, ...)
+    int gameState = -1;     // the game's highlight state of the item (2 matched, 1 not, 0 not judged; -1 no element)
+    std::string gameText;   // the game's own search text of the item ("" = no element or not built yet)
     std::string modText;    // one line, '|' between mod lines
     std::string aggregated; // "key:value " pairs
     bool corrupted = false;
@@ -56,6 +59,9 @@ struct DiagCapture {
     std::string tabSummary;
     std::vector<DiagInventoryRow> inventories;
     std::vector<DiagItemRow> items;
+    int filterColumn = -1;            // the language column the search filters were built for
+    int gameElements = 0;             // tab items with a game element found / on screen
+    int gameItemsOnScreen = 0;
     QuickStashGame::PoeHighlight poe;
     std::vector<QuickStashGame::UiText> uiTexts;
     int uiVisited = 0;

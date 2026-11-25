@@ -4,6 +4,9 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #include "Diagnostics.h"
 
+#include "../game/CopyText.h"
+#include "../game/GameHighlight.h"
+#include "../game/ItemClasses.h"
 #include "../game/Languages.h"
 #include "../game/PanelDetector.h"
 #include "../game/TextMatch.h"
@@ -144,26 +147,36 @@ std::string BuildReport(const DiagCapture& c, const char* version) {
     r += '\n';
     AppendField(r, "filter", c.poe.filter, 160);
     r += "Open tab: " + (c.tabSummary.empty() ? std::string("none") : c.tabSummary) + "\n";
-    const QuickStashGame::SearchQuery query(c.poe.filter);
+    r += "Game highlight elements: " + std::to_string(c.gameElements) + " of " + std::to_string(c.gameItemsOnScreen) +
+         " items on screen\n";
+    const QuickStashGame::SearchFilters filters = QuickStashGame::MakeSearchFilters(c.filterColumn);
+    const QuickStashGame::SearchQuery query(c.poe.filter, &filters);
     int nameHits = 0, modHits = 0;
     std::string body;
     int row = 0;
     for (const auto& it : c.items) {
         ++row;
-        const std::string names =
-            QuickStashGame::FoldCase(it.baseName + "\n" + it.uniqueName + "\n" + it.directBase + it.itemClass);
+        const std::string names = QuickStashGame::FoldCase(it.baseName + "\n" + it.uniqueName + "\n" + it.directBase +
+                                                           it.itemClass + it.facts);
         const bool nameHit = !query.Empty() && query.Matches(names);
         const bool modHit = !query.Empty() && query.Matches(QuickStashGame::FoldCase(it.modText));
         nameHits += nameHit ? 1 : 0;
         modHits += modHit ? 1 : 0;
         body += "#" + std::to_string(row) + " slot " + std::to_string(it.slotX) + "," + std::to_string(it.slotY) +
-                " match names/mods " + (nameHit ? "1" : "0") + "/" + (modHit ? "1" : "0") + "\n";
+                " match names/mods " + (nameHit ? "1" : "0") + "/" + (modHit ? "1" : "0") + ", game " +
+                (it.gameState == 2   ? "matched"
+                 : it.gameState == 1 ? "not matched"
+                 : it.gameState == 0 ? "not judged"
+                                     : "no element") +
+                "\n";
         AppendField(body, "path", it.path, 160);
         AppendField(body, "list base", it.baseName, 160);
         AppendField(body, "direct base", it.directBase, 160);
         AppendField(body, "class", it.itemClass, 160);
+        AppendField(body, "facts", it.facts, 300);
         if (!it.uniqueName.empty()) AppendField(body, "list unique", it.uniqueName, 160);
         AppendField(body, "mods", it.modText, 600);
+        AppendField(body, "game text", it.gameText, 900);
     }
     r += "Reported items: " + std::to_string(c.items.size()) + ", matches names/mods: " + std::to_string(nameHits) +
          "/" + std::to_string(modHits) + "\n\n";
@@ -228,6 +241,17 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
                       QuickStashGame::IsGuildStashInventory(*tab) ? " guild" : "",
                       static_cast<int>(tab->Items.size()), tab->TotalBoxesX, tab->TotalBoxesY);
         c.tabSummary = buf;
+        c.filterColumn = language.Localized() ? QuickStashGame::ItemClassLanguageColumn(language.hostName) : -1;
+        // The game's own highlight elements of the tab's on-screen items (found by a UI walk now).
+        QuickStashGame::GameHighlightReader game;
+        std::vector<uintptr_t> onScreen;
+        for (const auto& it : tab->Items)
+            if (it.Address && QuickStashGame::ResolveItemRect(*tab, it, displayW, displayH))
+                onScreen.push_back(it.Address);
+        game.DiscoverNow(ctx, onScreen);
+        c.gameItemsOnScreen = static_cast<int>(onScreen.size());
+        for (const uintptr_t a : onScreen)
+            if (game.ElementOf(a)) ++c.gameElements;
         for (const auto& it : tab->Items) {
             if (c.items.size() >= kMaxItems) break;
             DiagItemRow row;
@@ -237,11 +261,16 @@ DiagCapture CaptureDiagnostics(const PluginSDK::Context* ctx, const char* versio
             row.uniqueName = it.UniqueName;
             row.path = it.Path;
             row.itemClass = QuickStashGame::BuildClassSearchText(it.Path, language);
+            row.facts = QuickStashGame::BuildFactText(it, nullptr, language);
             if (it.Address) {
+                row.gameState = game.StateOf(ctx, it.Address);
+                row.gameText = game.SearchTextOf(ctx, it.Address);
                 row.directBase = ctx->Inventory.ReadItemBaseTypeName(it.Address);
                 if (!row.directBase.empty()) {
-                    row.modText = QuickStashGame::BuildModText(ctx, it, language).text;
-                    row.corrupted = ctx->Inventory.ReadItemMods(it.Address).IsCorrupted;
+                    const PluginSDK::ItemMods mods = ctx->Inventory.ReadItemMods(it.Address);
+                    row.facts = QuickStashGame::BuildFactText(it, &mods, language);
+                    row.modText = QuickStashGame::BuildModText(ctx, it, mods, language).text;
+                    row.corrupted = mods.IsCorrupted;
                     for (const auto& kv : ctx->Inventory.ReadItemAggregatedStats(it.Address)) {
                         row.aggregated += std::to_string(kv.first) + ":" + std::to_string(kv.second) + " ";
                     }

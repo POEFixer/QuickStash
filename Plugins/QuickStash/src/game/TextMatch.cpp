@@ -62,7 +62,75 @@ bool SearchQuery::HasRegexSyntax(std::string_view token) {
     return false;
 }
 
-SearchQuery::SearchQuery(const std::string& raw) : m_raw(raw) {
+namespace {
+
+std::string TrimSpaces(std::string_view s) {
+    size_t a = 0, b = s.size();
+    while (a < b && IsSpace(s[a])) ++a;
+    while (b > a && IsSpace(s[b - 1])) --b;
+    return std::string(s.substr(a, b - a));
+}
+
+std::string EscapeRegex(std::string_view s) {
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '.': case '*': case '+': case '?': case '[': case ']': case '(': case ')': case '{':
+            case '}': case '^': case '$': case '\\': case '|': case '/':
+                out += '\\';
+                break;
+            default:
+                break;
+        }
+        out += c;
+    }
+    return out;
+}
+
+bool AllDigits(std::string_view s) {
+    if (s.empty()) return false;
+    for (char c : s)
+        if (c < '0' || c > '9') return false;
+    return true;
+}
+
+} // namespace
+
+bool SearchQuery::ParseFilter(const std::string& body, const SearchFilters& filters, std::vector<Alternative>& out) {
+    // The game: ^[ ]*(?:<aliases>)[ ]*:[ ]*(?:[0-9]+|\[.*\])[ ]*$, case-insensitive. A number becomes
+    // the whole line "<label>: <n>"; a [bracketed] value the regular expression "<label>: [..]".
+    const size_t colon = body.find(':');
+    if (colon == std::string::npos) return false;
+    const std::string alias = FoldCase(TrimSpaces(std::string_view(body).substr(0, colon)));
+    const std::string value = TrimSpaces(std::string_view(body).substr(colon + 1));
+    const bool number = AllDigits(value);
+    const bool bracket = value.size() >= 2 && value.front() == '[' && value.back() == ']';
+    if (alias.empty() || (!number && !bracket)) return false;
+    for (const SearchFilter* filter : {&filters.itemLevel, &filters.waystoneTier}) {
+        bool named = false;
+        for (const std::string& a : filter->aliases)
+            if (!a.empty() && FoldCase(a) == alias) { named = true; break; }
+        if (!named) continue;
+        for (const std::string& label : filter->labels) {
+            if (label.empty()) continue;
+            const std::string line = FoldCase(label) + ": ";
+            if (number) {
+                out.push_back(Alternative{line + value, true, nullptr});
+            } else {
+                try {
+                    out.push_back(Alternative{std::string(), false, std::make_shared<const std::regex>(
+                        EscapeRegex(line) + value, std::regex::ECMAScript | std::regex::icase | std::regex::nosubs)});
+                } catch (const std::regex_error&) {
+                    // Not a valid expression: no alternative from this label.
+                }
+            }
+        }
+        return true;   // the first filter whose alias the token names decides, as in the game
+    }
+    return false;
+}
+
+SearchQuery::SearchQuery(const std::string& raw, const SearchFilters* filters) : m_raw(raw) {
     // Split into terms at whitespace outside double quotes; quotes only group.
     std::vector<std::string> tokens;
     std::string current;
@@ -91,21 +159,25 @@ SearchQuery::SearchQuery(const std::string& raw) : m_raw(raw) {
         const std::string body = token.substr(start);
         if (body.empty()) continue;
 
-        if (HasRegexSyntax(body)) {
+        if (filters && ParseFilter(body, *filters, term.alternatives)) {
+            // A filter that yields no line (no label in any language) matches nothing; keep the term so
+            // it still narrows the search instead of disappearing.
+            if (term.alternatives.empty()) term.alternatives.push_back(Alternative{std::string("\n"), true, nullptr});
+        } else if (HasRegexSyntax(body)) {
             try {
                 auto re = std::make_shared<const std::regex>(
                     body, std::regex::ECMAScript | std::regex::icase | std::regex::nosubs);
-                term.alternatives.push_back(Alternative{std::string(), std::move(re)});
+                term.alternatives.push_back(Alternative{std::string(), false, std::move(re)});
             } catch (const std::regex_error&) {
                 // Not a valid expression: match the text literally instead.
-                term.alternatives.push_back(Alternative{FoldCase(body), nullptr});
+                term.alternatives.push_back(Alternative{FoldCase(body), false, nullptr});
             }
         } else {
             size_t pos = 0;
             while (pos <= body.size()) {
                 const size_t bar = body.find('|', pos);
                 const std::string part = body.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
-                if (!part.empty()) term.alternatives.push_back(Alternative{FoldCase(part), nullptr});
+                if (!part.empty()) term.alternatives.push_back(Alternative{FoldCase(part), false, nullptr});
                 if (bar == std::string::npos) break;
                 pos = bar + 1;
             }
@@ -115,17 +187,31 @@ SearchQuery::SearchQuery(const std::string& raw) : m_raw(raw) {
 }
 
 bool SearchQuery::Matches(const std::string& foldedHaystack) const {
+    if (m_terms.empty()) return true;
+    // One line at a time, like the game: empty lines never match.
+    std::vector<std::string_view> lines;
+    for (size_t pos = 0; pos <= foldedHaystack.size();) {
+        size_t end = foldedHaystack.find('\n', pos);
+        if (end == std::string::npos) end = foldedHaystack.size();
+        if (end > pos) lines.emplace_back(foldedHaystack.data() + pos, end - pos);
+        pos = end + 1;
+    }
     for (const Term& term : m_terms) {
         bool hit = false;
         for (const Alternative& alt : term.alternatives) {
-            if (alt.re) {
-                try {
-                    hit = std::regex_search(foldedHaystack, *alt.re);
-                } catch (const std::regex_error&) {
-                    hit = false;  // e.g. complexity limit on a pathological pattern
+            for (const std::string_view line : lines) {
+                if (alt.re) {
+                    try {
+                        hit = std::regex_search(line.begin(), line.end(), *alt.re);
+                    } catch (const std::regex_error&) {
+                        hit = false;  // e.g. complexity limit on a pathological pattern
+                    }
+                } else if (alt.wholeLine) {
+                    hit = line == alt.literal;
+                } else {
+                    hit = alt.literal.empty() || line.find(alt.literal) != std::string_view::npos;
                 }
-            } else {
-                hit = ContainsFolded(foldedHaystack, alt.literal);
+                if (hit) break;
             }
             if (hit) break;
         }

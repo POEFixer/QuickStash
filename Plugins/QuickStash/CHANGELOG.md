@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- TAKE now takes exactly the items the game outlines: it reads the game's own result of the Highlight Items search, so item level, rarity, properties (Quality, Armour, Energy Shield...), requirements and the game's filters (`ilvl:80`, `tier:15`, `loc:3,5`) all work, in your game's language. New setting "Take exactly what the game outlines" (on by default); the "How it works" card shows whether the game's highlight or Quick Stash's own search decided.
+- When the game's result cannot be read (for example right after a game patch), Quick Stash's own search is used. It now also finds the rarity, item level, waystone tier and level requirement lines (`Rarity: Rare`, `Item Level: 82`, `Requires: Level 80`), `unidentified`, `ilvl:80` and `tier:15`, and checks each search word line by line like the game.
+- The Diagnostics report shows, for every item, the game's own highlight state and search text next to Quick Stash's.
+
 ## 1.4.9
 
 - TAKE also finds items by their class, as the game's search does: it matches the "Item Class: Helmets" line of the item's text, so "helm" takes every helmet (an Ancestral Tiara too) and "jewel" every jewel, in English and in the mod text language (Automatic: the game language). The class names come from the game's own data.

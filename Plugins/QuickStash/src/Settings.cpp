@@ -72,6 +72,7 @@ std::string Settings::ToJson() const {
     j["verify_panels_open"]    = verifyPanelsOpen;
     j["show_take_button"]      = showTakeButton;
     j["read_mods"]             = readMods;
+    j["use_game_highlight"]    = useGameHighlight;
     j["show_highlights"]       = showHighlights;
     j["mod_language"]          = QuickStashGame::GameLanguageKey(modLanguage);
     j["highlight_color"]       = {highlightColor[0], highlightColor[1], highlightColor[2], highlightColor[3]};
@@ -104,6 +105,7 @@ bool Settings::FromJson(const std::string& text) {
     verifyPanelsOpen   = ReadBool(j, "verify_panels_open", verifyPanelsOpen);
     showTakeButton     = ReadBool(j, "show_take_button", showTakeButton);
     readMods           = ReadBool(j, "read_mods", readMods);
+    useGameHighlight   = ReadBool(j, "use_game_highlight", useGameHighlight);
     showHighlights     = ReadBool(j, "show_highlights", showHighlights);
     if (const auto it = j.find("mod_language"); it != j.end() && it->is_string()) {
         const std::string key = it->get<std::string>();

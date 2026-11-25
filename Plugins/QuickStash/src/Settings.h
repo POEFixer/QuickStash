@@ -57,6 +57,7 @@ struct Settings {
     // Take from stash.
     bool showTakeButton  = true;
     bool readMods        = true;
+    bool useGameHighlight = true;   // TAKE follows the game's own highlight result when readable
     bool showHighlights  = true;
     int  modLanguage     = 0;   // QuickStashGame::GameLanguage (0 = automatic)
     std::array<float, 4> highlightColor{0.35f, 0.78f, 1.0f, 0.92f};

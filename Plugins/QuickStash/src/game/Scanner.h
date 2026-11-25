@@ -6,6 +6,7 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #pragma once
 
+#include "GameHighlight.h"
 #include "Languages.h"
 #include "PoeHighlight.h"
 #include "TextMatch.h"
@@ -47,6 +48,10 @@ struct ScanSnapshot {
     std::vector<ScreenRect> takeRects;
     int  takeQty = 0;
     bool takePending = false;
+    bool takeFromGame = false;         // the game's own highlight decided (else the plugin's search)
+    int  gameItemsOnScreen = 0;        // the game's result: items on screen / with an element
+    int  gameItemsWithElement = 0;
+    std::string gameWhy;               // why the game's result was not used (English, diagnostics)
 
     // Diagnostics.
     int    uiNodesVisited = 0;
@@ -67,7 +72,7 @@ public:
     std::shared_ptr<const ScanSnapshot> Latest() const;
 
     // Inputs from the render thread.
-    void SetOptions(bool takeEnabled, bool readMods, int languageSetting);
+    void SetOptions(bool takeEnabled, bool readMods, int languageSetting, bool useGameHighlight);
     void SetDisplaySize(float w, float h);
     void SetTransferRunning(bool running);
     void Wake();
@@ -92,6 +97,7 @@ private:
     std::atomic<bool>  m_takeEnabled{true};
     std::atomic<bool>  m_readMods{true};
     std::atomic<int>   m_languageSetting{0};
+    std::atomic<bool>  m_useGameHighlight{true};
     std::atomic<float> m_displayW{0.0f};
     std::atomic<float> m_displayH{0.0f};
     std::atomic<bool>  m_transferRunning{false};
@@ -107,6 +113,8 @@ private:
     std::chrono::steady_clock::time_point m_lastScanRequest{};
     ItemTextCache m_textCache;
     SearchQuery   m_query;
+    int           m_queryColumn = -2;       // the language column m_query's filters were built for
+    GameHighlightReader m_gameHighlight;
     PoeHighlight  m_lastHighlight;
     std::chrono::steady_clock::time_point m_lastHighlightAt{};
     bool          m_lastHighlightOk = false;

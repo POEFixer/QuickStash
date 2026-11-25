@@ -4,6 +4,7 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 #pragma once
 
+#include "GameHighlight.h"
 #include "Languages.h"
 #include "TextMatch.h"
 #include "TransferPlanner.h"
@@ -103,10 +104,19 @@ struct ModTextResult {
     bool        pending = false;  // localized text still loading on the host: ask again later
 };
 
-// Mod names, affix names, formatted stat lines, "Corrupted" and the waystone reward stats, in
-// English plus `language` when it is not English.
+// The Ctrl+C copy text lines the plugin can rebuild for the item (CopyText.h: "Rarity: Rare",
+// "Item Level: 82", "Waystone Tier: 15", "Requires: Level 80", "Unidentified") and "Corrupted", in
+// English plus `language` when it is not English. `mods`: the item's mods read (nullptr or not Valid:
+// unread; only the lines the class tells are written).
+std::string BuildFactText(const PluginSDK::InventoryItem& item, const PluginSDK::ItemMods* mods,
+                          const ModLanguage& language);
+
+// Mod names, affix names, formatted stat lines and the waystone reward stats, in English plus
+// `language` when it is not English. The first form reads the item (empty for an item that moved).
 ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
                            const ModLanguage& language);
+ModTextResult BuildModText(const PluginSDK::Context* ctx, const PluginSDK::InventoryItem& item,
+                           const PluginSDK::ItemMods& mods, const ModLanguage& language);
 
 // Searchable text per item, folded for matching, cached by item address and
 // metadata path across passes. Owned and used by one thread.
@@ -129,6 +139,9 @@ private:
         std::string classLanguage;  // ModLanguage::hostName the class lines were built in
         std::string classFolded;
         bool classRead = false;
+        std::string factsLanguage;  // ... and the copy text lines (rarity, item level, ...)
+        std::string factsFolded;
+        bool factsRead = false;
         std::string namesFolded;
         std::string modsFolded;
         std::string combined;
@@ -153,8 +166,11 @@ struct WithdrawSelection {
     bool pending = false;            // some items' text not read yet: the count may still change
 };
 
+// `game`: the game's own result for the tab; used unless nullptr or Unavailable (then the plugin's
+// search over ItemTextCache decides). Pending marks the selection pending.
 WithdrawSelection SelectWithdrawTargets(const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
                                         float displayW, float displayH, ItemTextCache& cache,
-                                        const SearchQuery& query, bool readMods, const ModLanguage& language);
+                                        const SearchQuery& query, bool readMods, const ModLanguage& language,
+                                        const GameHighlightResult* game = nullptr);
 
 } // namespace QuickStashGame

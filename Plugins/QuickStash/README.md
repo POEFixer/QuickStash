@@ -35,14 +35,27 @@ With a vendor open, Ctrl+click sells; with a trade window open, it offers the it
    the guild stash the button reads **TAKE G(N)**.
 4. Click **TAKE**.
 
-The search follows the game's rules: words separated by spaces must all match
-(in any order), `"quoted text"` is one phrase, `!word` excludes, `a|b` matches
-either, and regular expressions work. Item names, the item class line the game
-copies with the item (`Item Class: Helmets`: `helm` finds every helmet, an
-Ancestral Tiara too; `jewel` every jewel), mods (when "Search item mods too" is
-on), `corrupted` and waystone reward stats (item rarity, pack size, monster
-rarity, monster effectiveness, waystone drop chance) can be matched.
-While the plugin is still reading item mods the button shows `...` and waits.
+TAKE takes exactly the items the game outlines: it reads the game's own result
+of the search, so everything the game matches counts (item class, rarity, item
+level, properties such as Quality or Energy Shield, requirements, mods, flags
+like Corrupted) and the game's filters work: `ilvl:80`, `ilvl:[8-9][0-9]`,
+`tier:15`, `loc:3,5`. Right after you type, the button shows `...` until the
+game has outlined every item.
+
+When the game's result cannot be read (for example right after a game patch,
+until Quick Stash is updated, or when the game has not outlined every item after
+a few seconds), TAKE uses its own search until you change the text or the tab, which follows the
+game's rules: words separated by spaces must all match (in any order), each on
+one line of the item's text, `"quoted text"` is one phrase, `!word` excludes,
+`a|b` matches either, regular expressions work, and `ilvl:80` / `tier:15` work
+too. It matches item names, the item class line (`Item Class: Helmets`: `helm`
+finds every helmet, an Ancestral Tiara too), the rarity, item level, waystone
+tier and level requirement lines (`Rarity: Rare`, `Item Level: 82`,
+`Requires: Level 80`), `unidentified`, `corrupted`, mods (when "Search item mods
+too" is on) and the waystone reward stats. It cannot see properties (Quality,
+Armour, Energy Shield...), attribute requirements or `loc:`. While it is still
+reading items the button shows `...` and waits. The "How it works" card says
+which of the two decided.
 
 TAKE never touches your backpack, equipment, flasks or charms, and ignores the
 Ritual "Favours" window. With a vendor window open, Ctrl+click buys: close
@@ -76,6 +89,9 @@ Turn off POEFixer's own auto-stash while you use this plugin: both use Ctrl+clic
 **TAKE**
 - *Show the TAKE button*: turn off if you only use Transfer (the plugin then
   stops reading the search box).
+- *Take exactly what the game outlines* (on by default): TAKE follows the game's
+  own highlight result. Off, or when the game's result cannot be read, Quick
+  Stash's own search decides, with the options below.
 - *Search item mods too*: also match words in the items' mods.
 - *Mod text language*: mod lines are always searchable in English; pick your
   game client's language to search its wording too. *Automatic* takes the game
@@ -116,9 +132,12 @@ earlier Quick Stash versions are read and kept.
   stays hidden rather than guess.
 - Localized mod wording depends on the game text the host has for that
   language; English mod text is always included.
-- Item classes come from the game data the plugin version was built with, in
-  English plus the *Mod text language*: a base type a later game patch adds is
-  found by its name and mods until the plugin is updated.
+- Reading the game's own result depends on where this game version keeps it; a
+  game patch can move it. Quick Stash then falls back to its own search by itself
+  (the "How it works" card says so) until it is updated.
+- Its own search's item classes and line words come from the game data the plugin
+  version was built with, in English plus the *Mod text language*: a base type a
+  later game patch adds is found by its name and mods until the plugin is updated.
 - Chat being open is not detected: close chat before a run (Ctrl+click in chat
   links the item instead of moving it).
 
